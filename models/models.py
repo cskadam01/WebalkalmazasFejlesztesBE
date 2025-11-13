@@ -17,10 +17,10 @@ class RoleEnum(PyEnum):
 class Users(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    username = Column(String(50))
     full_name = Column(String(50))
     password = Column(String(50))
-    email = Column(String(50))
+    email = Column(String(50), unique=True, index=True, nullable=False)
+    username = Column(String(50), unique=True, index=True, nullable=False)
     mobile = Column(String(50))
     role = Column(Enum(RoleEnum), nullable=False)
 

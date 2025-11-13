@@ -17,7 +17,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # ITT húzzuk be a modelleket (és a Base-et is)
 from models.models import Base   # <- innen jön a Base és az összes model klassz
 
-Base.metadata.create_all(bind=engine)
+#Base.metadata.create_all(bind=engine)
 def get_db():
     db = SessionLocal()
     try:
