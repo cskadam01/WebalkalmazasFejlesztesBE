@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from pydantic import BaseModel
 from database.db import SessionLocal, get_db
@@ -97,17 +98,15 @@ def register (new_user: CreateUser, current_user: dict = Depends(get_current_use
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Nincs jogosultság")
         
         get_user = db.query(Users).filter(new_user.email == Users.email).first()
-
-        if  new_user.email == get_user.email:
-            raise HTTPException(status_code = status.HTTP_409_CONFLICT, detail= "Foglalt email cím")
+        if  get_user:
         
-        if  new_user.full_name == get_user.full_name:
-            raise HTTPException(status_code = status.HTTP_409_CONFLICT, detail= "Foglalt teljes név")
+            if  new_user.email == get_user.email:
+                raise HTTPException(status_code = status.HTTP_409_CONFLICT, detail= "Foglalt email cím")
 
 
-        if  new_user.username == get_user.username:
-            raise HTTPException(status_code = status.HTTP_409_CONFLICT, detail= "Foglalt felhasználónév")
-        
+            if  new_user.username == get_user.username:
+                raise HTTPException(status_code = status.HTTP_409_CONFLICT, detail= "Foglalt felhasználónév")
+            
         password = generate_password(12)
         hashed_pw = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
 
