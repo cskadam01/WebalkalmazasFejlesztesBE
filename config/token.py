@@ -35,7 +35,7 @@ def create_access_token(data: dict, expires_minutes: int = expire_time):
 #kapott token dekódolása
 def decode_token(token: str) -> dict:
     try:
-        return jwt.decode(secret_pass, token, algorithms=[token_algorithm])
+        return jwt.decode(token, secret_pass, algorithms=[token_algorithm])
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Érvénytelen token")
 
@@ -55,7 +55,7 @@ def get_current_user(request : Request):
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Hibás token")
 
-    session_key = f"session: {user_id}"
+    session_key = f"session:{user_id}"
     stored = r.get(session_key)
     if not stored:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Lejárt vagy hiányzó session")

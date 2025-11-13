@@ -28,7 +28,6 @@ r = redis.from_url(
 )
 
 router = APIRouter(
-    prefix="/users",
     tags=["Users"]
 )
 
@@ -154,6 +153,7 @@ def register (new_user: CreateUser, current_user: dict = Depends(get_current_use
         db.refresh(new_user_obj)
 
         return{
-            "message" : "Sikeresen létrehozott felhasználó"
+            "message" : "Sikeresen létrehozott felhasználó",
+            "pass" : password
 
         }

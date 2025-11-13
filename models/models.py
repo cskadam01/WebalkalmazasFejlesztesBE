@@ -8,9 +8,9 @@ Base = declarative_base()
 
 #Előre meghatározott role-ok előkészítése
 class RoleEnum(PyEnum):
-    ADMIN = "admin"
-    GROUP_LEADER = "group_leader"
-    MEMBER = "member"
+    admin = "admin"
+    group_leader = "group_leader"
+    member = "member"
 
 
 #Fehasználó Tábla definiálása
@@ -18,7 +18,7 @@ class Users(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     full_name = Column(String(50))
-    password = Column(String(50))
+    password = Column(String(128),  nullable=False)
     email = Column(String(50), unique=True, index=True, nullable=False)
     username = Column(String(50), unique=True, index=True, nullable=False)
     mobile = Column(String(50))
