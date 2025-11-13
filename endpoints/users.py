@@ -44,12 +44,33 @@ class CreateUser(BaseModel):
     username: str
     full_name: str
     mobile: str
-    role: str
+    role: RoleEnum
 
 
 
+#Felhasználó authentikáció lekérés
+@router.get("/auth")
+def check_me(current_user : dict = Depends(get_current_user)):
+    return current_user
 
 
+#Felhasználó adatainak lekérése
+@router.get("/user_details")
+def get_user_data(current_user : dict = Depends(get_current_user),db: Session = Depends(get_db) ):
+
+    user_details = db.query(Users).filter(Users.username == current_user["username"]).first()
+
+    return{ 
+        "id" : user_details.id,
+        "full_name" :user_details.full_name,
+        "email" :user_details.email,
+        "username" :user_details.username,
+        "mobile" :user_details.mobile,
+        "role" :user_details.role,
+    }
+
+
+#Bejelentkezés
 @router.post("/login")
 def login (user: LoginUser, response : Response, db: Session = Depends(get_db) ):
     gotten_user = db.query(Users).filter(Users.email == user.email).first()
@@ -59,7 +80,7 @@ def login (user: LoginUser, response : Response, db: Session = Depends(get_db) )
 
     stored_hash = gotten_user.password if isinstance(gotten_user.password, (bytes, bytearray)) else gotten_user.password.encode("utf-8")
     if not bcrypt.checkpw(user.password.encode("utf-8"), stored_hash):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Helytelen felhasználó")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Hibás jelszó")
     
     data = {
         "sub": str(gotten_user.id),
@@ -79,40 +100,46 @@ def login (user: LoginUser, response : Response, db: Session = Depends(get_db) )
         max_age=60*120
     )
 
-    #Token átalakítása json fromátumra
-    token_json  = json.dumps(token)
-
-    #Azonosító létrehozása
-    session_key = f"session: {gotten_user.id}"
-
-    #Lejárati idővel eltároljuk
-    r.setex(token_json, 7200, session_key)
+    session_key = f"session:{gotten_user.id}"  
+    session_value = json.dumps({
+        "token": token,
+        "user_id": gotten_user.id,
+        "username": gotten_user.username,
+        "role": data["role"]
+    })
+    r.setex(session_key, 7200, session_value)
 
     return {"message": "sikeres bejelentkezés", "role" : gotten_user.role}
 
 
+
+#Profil lértehozása csak admin által
 @router.post("/create_user")
 def register (new_user: CreateUser, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db), ):
-    try:
+
         if current_user["role"]  != "admin":
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Nincs jogosultság")
         
-        get_user = db.query(Users).filter(new_user.email == Users.email).first()
-        if  get_user:
-        
-            if  new_user.email == get_user.email:
-                raise HTTPException(status_code = status.HTTP_409_CONFLICT, detail= "Foglalt email cím")
+        conflict = (
+            db.query(Users)
+            .filter(or_(
+                Users.email == new_user.email,
+                Users.username == new_user.username
+            ))
+            .first()
+        )
 
-
-            if  new_user.username == get_user.username:
-                raise HTTPException(status_code = status.HTTP_409_CONFLICT, detail= "Foglalt felhasználónév")
+        if conflict:
+            if conflict.email == new_user.email:
+                raise HTTPException(409, "Ez az email már foglalt.")
+            if conflict.username == new_user.username:
+                raise HTTPException(409, "Ez a felhasználónév már foglalt.")
             
+             
         password = generate_password(12)
         hashed_pw = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
 
 
-
-        
         new_user_obj = Users(
             username=new_user.username,
             full_name=new_user.full_name,
@@ -130,5 +157,3 @@ def register (new_user: CreateUser, current_user: dict = Depends(get_current_use
             "message" : "Sikeresen létrehozott felhasználó"
 
         }
-    except:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Valami hiba lépett fel")
