@@ -7,6 +7,7 @@ from models.models import RoleEnum, Users
 from config.password import generate_password 
 import bcrypt
 from config.token import create_access_token, get_current_user
+from config.auth import require_admin
 import redis
 import os
 from dotenv import load_dotenv
@@ -114,10 +115,8 @@ def login (user: LoginUser, response : Response, db: Session = Depends(get_db) )
 
 #Profil lértehozása csak admin által
 @router.post("/create_user")
-def register (new_user: CreateUser, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db), ):
+def register (new_user: CreateUser, current_user: dict = Depends(require_admin), db: Session = Depends(get_db), ):
 
-        if current_user["role"]  != "admin":
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Nincs jogosultság")
         
         conflict = (
             db.query(Users)
@@ -142,7 +141,7 @@ def register (new_user: CreateUser, current_user: dict = Depends(get_current_use
         new_user_obj = Users(
             username=new_user.username,
             full_name=new_user.full_name,
-            password=hashed_pw,
+            password = hashed_pw.decode("utf-8"),
             email=new_user.email,
             mobile=new_user.mobile,
             role=new_user.role
@@ -157,3 +156,19 @@ def register (new_user: CreateUser, current_user: dict = Depends(get_current_use
             "pass" : password
 
         }
+
+
+@router.post("/logout")
+def logout ( response : Response, current_user : dict = Depends(get_current_user)):
+    
+    session_key = f"session:{current_user['id']}"
+    success = r.delete(session_key)
+    if success == 1:
+        print("törlés sikeres volt")
+    else:
+        print("nem sikerült törölni redisből a tokent")
+
+
+    response.delete_cookie("access_token")
+
+    return{"message" : "Sikeres kijelentkezés"}
