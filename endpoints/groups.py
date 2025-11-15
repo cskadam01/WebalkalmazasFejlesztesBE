@@ -47,6 +47,51 @@ def get_groups (current_user: dict = Depends(get_current_user), db: Session = De
     
     return [group.to_dict() for group in user_groups]
 
+@router.get("/group/{group_id}")
+def get_group(group_id : int, current_user: dict = Depends(get_current_user), db : Session = Depends(get_db)):
+    
+
+    if current_user["role"] == "admin":
+        group = db.query(Groups).filter(Groups.id == group_id).first()
+        if not group:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nincs ilyen csoport")
+    elif current_user["role"] == "group_leader":
+        group = db.query(Groups).filter(and_(Groups.leader_id == current_user["id"], Groups.id == group_id)).first()
+        if not group:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nem jogosult ehhez a csoporthoz")
+    elif current_user["role"] == "member":
+        group = db.query(Groups).join(
+                Group_Members, Group_Members.group_id == Groups.id).filter(
+                Group_Members.user_id == current_user["id"], Groups.id == group_id).first()
+        if not group:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Nem jogosult ehhez a csoporthoz")
+
+
+
+    members = []
+
+    for i in group.members:
+        member_data = {
+            "member_id" : i.user.id,
+            "member_name" :  i.user.username
+        }
+        members.append(member_data)
+    
+    
+
+    return{
+        "groupID":  group.id,
+        "groupName":group.group_name,
+        "groupLeader" : group.leader.username,
+        "groupMembers" : members,
+        "groupDesc" : group.group_description,
+        "memberCount" : len(members)+1
+    }
+
+
+
+
+
 #Csoport létrehozása, a group leaderek és az adminok fognak tudni csportokat létrehozni
 @router.post("/create-group")
 def create_group(new_group : NewGroup, current_user: dict = Depends(require_leader_or_admin), db : Session = Depends(get_db)):
