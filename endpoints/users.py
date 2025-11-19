@@ -44,6 +44,7 @@ class CreateUser(BaseModel):
     username: str
     full_name: str
     mobile: str
+    specialty : str
     role: RoleEnum
 
 
@@ -134,7 +135,7 @@ def get_user (userID : int, currnet_user : dict = Depends(get_current_user), db 
     if not user_details:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Felhasználó nem található")
     
-    
+
     user_skills = []
 
     users_group = []
@@ -147,7 +148,7 @@ def get_user (userID : int, currnet_user : dict = Depends(get_current_user), db 
         "fullname" :  user_details.full_name,
         "role" : user_details.role,
         "groups" : users_group,
-        "speciality" : user_details.specialty,
+        "specialty" : user_details.specialty,
         "skills" : user_skills
 
     }
@@ -188,7 +189,8 @@ def register (new_user: CreateUser, current_user: dict = Depends(require_admin),
             password = hashed_pw.decode("utf-8"),
             email=new_user.email,
             mobile=new_user.mobile,
-            role=new_user.role
+            role=new_user.role,
+            specialty = new_user.speciality
         )
 
         db.add(new_user_obj)
@@ -198,7 +200,6 @@ def register (new_user: CreateUser, current_user: dict = Depends(require_admin),
         return{
             "message" : "Sikeresen létrehozott felhasználó",
             "pass" : password
-
         }
 
 

@@ -57,7 +57,7 @@ def change_level(userID : int, skillID : int, gotten_skill_level : SkillLevel, c
 
     return {f"Level sikeresen átírva {level_to_change.skill_level} --> {gotten_skill_level}"}
 
-@router.get("get-all-skills")
+@router.get("/get-all-skills")
 def get_all_skills( current_user : dict = Depends(require_admin), db : Session = Depends(get_db)):
 
     skills = db.query(Skills).all()
