@@ -7,7 +7,7 @@ from models.models import RoleEnum, Users
 from config.password import generate_password 
 import bcrypt
 from config.token import create_access_token, get_current_user
-from config.auth import require_admin
+from config.auth import require_admin, require_leader_or_admin
 import redis
 import os
 from dotenv import load_dotenv
@@ -110,6 +110,50 @@ def login (user: LoginUser, response : Response, db: Session = Depends(get_db) )
     r.setex(session_key, 7200, session_value)
 
     return {"message": "sikeres bejelentkezés", "role" : gotten_user.role}
+
+
+@router.get("/all-users")
+def get_all_user(current_user : dict = Depends(require_leader_or_admin), db: Session = Depends(get_db)):
+    all_useres = db.query(Users).all()
+
+    all_user_data = []
+
+    for user in all_useres:
+        user_dict = {
+            "fullName" : user.full_name,
+            "speciality" : user.specialty
+        }
+        all_user_data.append(user_dict)
+
+    return all_user_data
+
+@router.get("/get-user/{userID}")
+def get_user (userID : int, currnet_user : dict = Depends(get_current_user), db : Session = Depends(get_db)):
+    
+    user_details = db.query(Users).filter(Users.id == userID).first()
+    if not user_details:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Felhasználó nem található")
+    
+
+    user_skills = []
+
+    users_group = []
+    for i in user_details.group_memberships:
+        users_group.append(i.group.group_name)
+    
+    
+    user_data = {
+        "username" : user_details.username,
+        "fullname" :  user_details.full_name,
+        "role" : user_details.role,
+        "groups" : users_group,
+        "speciality" : user_details.specialty,
+        "skills" : user_skills
+
+    }
+
+    return user_data
+
 
 
 

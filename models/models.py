@@ -23,6 +23,7 @@ class Users(Base):
     username = Column(String(50), unique=True, index=True, nullable=False)
     mobile = Column(String(50))
     role = Column(Enum(RoleEnum), nullable=False)
+    specialty = Column(String(50), nullable=False)
 
 
     #Kapcsolatok

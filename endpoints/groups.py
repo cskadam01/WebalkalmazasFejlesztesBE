@@ -47,6 +47,7 @@ def get_groups (current_user: dict = Depends(get_current_user), db: Session = De
     
     return [group.to_dict() for group in user_groups]
 
+#Csoport lekérdezlse group id alapján 
 @router.get("/group/{group_id}")
 def get_group(group_id : int, current_user: dict = Depends(get_current_user), db : Session = Depends(get_db)):
     
@@ -65,8 +66,6 @@ def get_group(group_id : int, current_user: dict = Depends(get_current_user), db
                 Group_Members.user_id == current_user["id"], Groups.id == group_id).first()
         if not group:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Nem jogosult ehhez a csoporthoz")
-
-
 
     members = []
 
