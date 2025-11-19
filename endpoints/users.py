@@ -134,7 +134,7 @@ def get_user (userID : int, currnet_user : dict = Depends(get_current_user), db 
     if not user_details:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Felhasználó nem található")
     
-
+    
     user_skills = []
 
     users_group = []
