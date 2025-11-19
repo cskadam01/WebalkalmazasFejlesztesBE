@@ -13,8 +13,8 @@ router = APIRouter(
 class NewSkill(BaseModel):
     skill_name: str
 
-class SkillLevel():
-    skill_level: int = 1
+class SkillLevel(BaseModel):
+    skill_level: int
 
 
 
