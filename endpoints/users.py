@@ -85,9 +85,9 @@ def login (user: LoginUser, response : Response, db: Session = Depends(get_db) )
     
     data = {
         "sub": str(gotten_user.id),
+        "userId" : gotten_user.id,
         "username" : gotten_user.username,
         "role": gotten_user.role.value if isinstance(gotten_user.role, RoleEnum) else gotten_user.role,
-
     }
     
     token = create_access_token(data)
