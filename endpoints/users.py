@@ -102,7 +102,7 @@ def login (user: LoginUser, response : Response, db: Session = Depends(get_db) )
         key = "access_token",
         value = token,
         httponly= True,
-        samesite= "lax",
+        samesite= "none",
         secure=True,
         max_age=60*120
     )
