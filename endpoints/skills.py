@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from pydantic import BaseModel
-from config.auth import require_admin
+from config.auth import require_admin, get_current_user
 from database.db import get_db
 from sqlalchemy.orm import Session
 from models.models import Skills, User_Skills
@@ -86,3 +86,28 @@ def remove_skill(userID : int, skillID : int, current_user : dict = Depends(requ
     db.commit()
 
     return{"Skill sikeresen eltávolítva a felhasználótól"}
+
+@router.get("/get-users-skill/{userID}")
+def get_users_skill(userID: int, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+
+    user_skills = (
+        db.query(User_Skills, Skills)
+        .join(Skills, User_Skills.skill_id == Skills.id)
+        .filter(User_Skills.user_id == userID)
+        .all()
+    )
+
+    if not user_skills:
+        return []
+
+    result = []
+
+    for us, skill in user_skills:
+        skill_data = {
+            "skillId": skill.id,
+            "skillName": skill.skill_name,
+            "skillLevel": us.skill_level
+        }
+        result.append(skill_data)
+
+    return result

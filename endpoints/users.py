@@ -61,6 +61,10 @@ def get_user_data(current_user : dict = Depends(get_current_user),db: Session = 
 
     user_details = db.query(Users).filter(Users.username == current_user["username"]).first()
 
+    groups = []
+    for i in user_details.group_memberships:
+        groups.append(i.group.group_name)
+
     return{ 
         "id" : user_details.id,
         "full_name" :user_details.full_name,
@@ -68,6 +72,8 @@ def get_user_data(current_user : dict = Depends(get_current_user),db: Session = 
         "username" :user_details.username,
         "mobile" :user_details.mobile,
         "role" :user_details.role,
+        "specialty" : user_details.specialty,
+        "groups" :  groups
     }
 
 
@@ -85,9 +91,9 @@ def login (user: LoginUser, response : Response, db: Session = Depends(get_db) )
     
     data = {
         "sub": str(gotten_user.id),
+        "userId" : gotten_user.id,
         "username" : gotten_user.username,
         "role": gotten_user.role.value if isinstance(gotten_user.role, RoleEnum) else gotten_user.role,
-
     }
     
     token = create_access_token(data)
@@ -96,7 +102,7 @@ def login (user: LoginUser, response : Response, db: Session = Depends(get_db) )
         key = "access_token",
         value = token,
         httponly= True,
-        samesite= "lax",
+        samesite= "none",
         secure=True,
         max_age=60*120
     )
