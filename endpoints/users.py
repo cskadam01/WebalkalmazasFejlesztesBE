@@ -56,7 +56,7 @@ def check_me(current_user : dict = Depends(get_current_user)):
 
 
 #Felhasználó adatainak lekérése
-@router.get("/user_details")
+@router.get("/user-details")
 def get_user_data(current_user : dict = Depends(get_current_user),db: Session = Depends(get_db) ):
 
     user_details = db.query(Users).filter(Users.username == current_user["username"]).first()
@@ -159,7 +159,7 @@ def get_user (userID : int, currnet_user : dict = Depends(get_current_user), db 
 
 
 #Profil lértehozása csak admin által
-@router.post("/create_user")
+@router.post("/create-user")
 def register (new_user: CreateUser, current_user: dict = Depends(require_admin), db: Session = Depends(get_db), ):
 
         
@@ -190,7 +190,7 @@ def register (new_user: CreateUser, current_user: dict = Depends(require_admin),
             email=new_user.email,
             mobile=new_user.mobile,
             role=new_user.role,
-            specialty = new_user.speciality
+            specialty = new_user.specialty
         )
 
         db.add(new_user_obj)
