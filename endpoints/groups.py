@@ -108,6 +108,17 @@ def create_group(new_group : NewGroup, current_user: dict = Depends(require_lead
 
     db.add(new_group_data)
     db.commit()
+
+    db.refresh(new_group_data)
+
+        # A létrehozó automatikusan kerüljön be a csoport tagjai közé
+    creator_membership = Group_Members(
+        user_id=current_user["id"],
+        group_id=new_group_data.id
+    )
+    db.add(creator_membership)
+    db.commit()
+    
     
     return{"message" : "Sikeres csoport létrehozás"}
 
