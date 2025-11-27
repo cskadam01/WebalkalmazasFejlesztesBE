@@ -7,7 +7,7 @@ from models.models import RoleEnum, Users
 from config.password import generate_password 
 import bcrypt
 from config.token import create_access_token, get_current_user
-from config.auth import require_admin
+from config.auth import require_admin, require_leader_or_admin
 import redis
 import os
 from dotenv import load_dotenv
@@ -44,6 +44,7 @@ class CreateUser(BaseModel):
     username: str
     full_name: str
     mobile: str
+    specialty : str
     role: RoleEnum
 
 
@@ -55,10 +56,14 @@ def check_me(current_user : dict = Depends(get_current_user)):
 
 
 #Felhasználó adatainak lekérése
-@router.get("/user_details")
+@router.get("/user-details")
 def get_user_data(current_user : dict = Depends(get_current_user),db: Session = Depends(get_db) ):
 
     user_details = db.query(Users).filter(Users.username == current_user["username"]).first()
+
+    groups = []
+    for i in user_details.group_memberships:
+        groups.append(i.group.group_name)
 
     return{ 
         "id" : user_details.id,
@@ -67,6 +72,8 @@ def get_user_data(current_user : dict = Depends(get_current_user),db: Session = 
         "username" :user_details.username,
         "mobile" :user_details.mobile,
         "role" :user_details.role,
+        "specialty" : user_details.specialty,
+        "groups" :  groups
     }
 
 
@@ -84,9 +91,9 @@ def login (user: LoginUser, response : Response, db: Session = Depends(get_db) )
     
     data = {
         "sub": str(gotten_user.id),
+        "userId" : gotten_user.id,
         "username" : gotten_user.username,
         "role": gotten_user.role.value if isinstance(gotten_user.role, RoleEnum) else gotten_user.role,
-
     }
     
     token = create_access_token(data)
@@ -95,7 +102,7 @@ def login (user: LoginUser, response : Response, db: Session = Depends(get_db) )
         key = "access_token",
         value = token,
         httponly= True,
-        samesite= "lax",
+        samesite= "none",
         secure=True,
         max_age=60*120
     )
@@ -112,9 +119,53 @@ def login (user: LoginUser, response : Response, db: Session = Depends(get_db) )
     return {"message": "sikeres bejelentkezés", "role" : gotten_user.role}
 
 
+@router.get("/all-users")
+def get_all_user(current_user : dict = Depends(require_leader_or_admin), db: Session = Depends(get_db)):
+    all_useres = db.query(Users).all()
+
+    all_user_data = []
+
+    for user in all_useres:
+        user_dict = {
+            "fullName" : user.full_name,
+            "speciality" : user.specialty
+        }
+        all_user_data.append(user_dict)
+
+    return all_user_data
+
+@router.get("/get-user/{userID}")
+def get_user (userID : int, currnet_user : dict = Depends(get_current_user), db : Session = Depends(get_db)):
+    
+    user_details = db.query(Users).filter(Users.id == userID).first()
+    if not user_details:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Felhasználó nem található")
+    
+
+    user_skills = []
+
+    users_group = []
+    for i in user_details.group_memberships:
+        users_group.append(i.group.group_name)
+    
+    
+    user_data = {
+        "username" : user_details.username,
+        "fullname" :  user_details.full_name,
+        "role" : user_details.role,
+        "groups" : users_group,
+        "specialty" : user_details.specialty,
+        "skills" : user_skills
+
+    }
+
+    return user_data
+
+
+
 
 #Profil lértehozása csak admin által
-@router.post("/create_user")
+@router.post("/create-user")
 def register (new_user: CreateUser, current_user: dict = Depends(require_admin), db: Session = Depends(get_db), ):
 
         
@@ -144,7 +195,8 @@ def register (new_user: CreateUser, current_user: dict = Depends(require_admin),
             password = hashed_pw.decode("utf-8"),
             email=new_user.email,
             mobile=new_user.mobile,
-            role=new_user.role
+            role=new_user.role,
+            specialty = new_user.specialty
         )
 
         db.add(new_user_obj)
@@ -154,7 +206,6 @@ def register (new_user: CreateUser, current_user: dict = Depends(require_admin),
         return{
             "message" : "Sikeresen létrehozott felhasználó",
             "pass" : password
-
         }
 
 
