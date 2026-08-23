@@ -1,0 +1,37 @@
+name: Build BabaEllatas APK
+
+on:
+  push:
+    branches: ["baba-apk-build"]
+    paths:
+      - "baba-app/**"
+      - ".github/workflows/baba-android.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: baba-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build debug APK
+        run: gradle assembleDebug --stacktrace
+      - name: Verify APK exists
+        run: |
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          unzip -t app/build/outputs/apk/debug/app-debug.apk >/dev/null
+          sha256sum app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BabaEllatas-2026-debug-apk
+          path: baba-app/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
