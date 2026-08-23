@@ -1,0 +1,41 @@
+name: Temporary BabaEllatas 1.1 Build
+
+on:
+  push:
+    branches: ["main"]
+    paths: [".github/workflows/baba-v11-temp-build.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: baba-apk-build
+      - name: Verify source bundle
+        run: unzip -t baba-source-v1.1.zip
+      - name: Prepare project
+        run: |
+          rm -rf baba-v11-build
+          mkdir baba-v11-build
+          unzip -q baba-source-v1.1.zip -d baba-v11-build
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build APK
+        run: cd baba-v11-build && gradle assembleDebug --stacktrace
+      - name: Verify APK
+        run: |
+          test -f baba-v11-build/app/build/outputs/apk/debug/app-debug.apk
+          unzip -t baba-v11-build/app/build/outputs/apk/debug/app-debug.apk >/dev/null
+          sha256sum baba-v11-build/app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BabaEllatas-2026-v1.1-apk
+          path: baba-v11-build/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
