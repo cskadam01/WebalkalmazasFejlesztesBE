@@ -18,7 +18,7 @@ jobs:
           ref: baba-apk-build
       - name: Restore source
         run: |
-          cat baba-v11-b64/part* > baba-v11-source.b64
+          cat baba-v11-b64/part00 baba-v11-b64/part01 baba-v11-b64/part02 baba-v11-b64/part03 baba-v11-b64/part04 baba-v11-b64/part05 baba-v11-b64/p06_0 baba-v11-b64/p06_1 baba-v11-b64/part07 > baba-v11-source.b64
           base64 -d baba-v11-source.b64 > baba-v11-source.zip
           unzip -t baba-v11-source.zip
           rm -rf baba-v11-build
