@@ -16,13 +16,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: baba-apk-build
-      - name: Verify source
-        run: unzip -t baba-source-v1.1.zip
-      - name: Extract source
+      - name: Restore source
         run: |
+          cat baba-v11-b64/part* > baba-v11-source.b64
+          base64 -d baba-v11-source.b64 > baba-v11-source.zip
+          unzip -t baba-v11-source.zip
           rm -rf baba-v11-build
           mkdir baba-v11-build
-          unzip -q baba-source-v1.1.zip -d baba-v11-build
+          unzip -q baba-v11-source.zip -d baba-v11-build
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
