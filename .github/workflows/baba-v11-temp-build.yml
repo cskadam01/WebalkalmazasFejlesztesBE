@@ -4,6 +4,8 @@ on:
   push:
     branches: ["main"]
     paths: [".github/workflows/baba-v11-temp-build.yml"]
+  pull_request:
+    branches: ["main"]
   workflow_dispatch:
 
 jobs:
