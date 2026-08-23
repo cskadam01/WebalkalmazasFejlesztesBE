@@ -1,0 +1,83 @@
+        state.unpaid=input("Nem biztosított / fizetés nélküli napok"); state.unpaid.setInputType(InputType.TYPE_CLASS_NUMBER);
+        state.insured=check("Biztosítási jogviszony",true);
+        x.addView(state.employer);x.addView(state.start);x.addView(state.end);x.addView(state.gross);x.addView(state.sick);x.addView(state.unpaid);x.addView(state.insured);
+
+        if (existing != null) {
+            state.employer.setText(existing.employer);
+            state.start.setText(existing.start == null ? "" : existing.start.toString());
+            state.end.setText(existing.end == null ? "" : existing.end.toString());
+            state.gross.setText(String.valueOf(existing.monthlyGross));
+            state.sick.setText(String.valueOf(existing.sickPayDays));
+            state.unpaid.setText(String.valueOf(existing.unpaidDays));
+            state.insured.setChecked(existing.insured);
+        }
+
+        AlertDialog dlg = new AlertDialog.Builder(this).setTitle(existing == null ? "Új munka / jogviszony" : "Munka / jogviszony szerkesztése").setView(scroll)
+                .setPositiveButton(existing == null ? "Hozzáadás" : "Módosítás mentése", null).setNegativeButton("Mégse",null).create();
+        state.dialog = dlg;
+        activeJobDialog = state;
+
+        contract.setOnClickListener(v -> {
+            if (SecureStore.getApiKey(this).isEmpty()) {
+                new AlertDialog.Builder(this).setTitle("OpenAI API-kulcs szükséges")
+                        .setMessage("A munkaszerződés automatikus feldolgozásához előbb add meg az OpenAI API-kulcsot a Beállításokban. A kézi kitöltést API-kulcs nélkül is használhatod.")
+                        .setPositiveButton("Beállítások", (d,w) -> showSettings())
+                        .setNegativeButton("Mégse", null).show();
+                return;
+            }
+            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            i.setType("*/*"); i.addCategory(Intent.CATEGORY_OPENABLE);
+            startActivityForResult(i, REQ_JOB_CONTRACT);
+        });
+
+        dlg.setOnDismissListener(d -> { if (activeJobDialog == state) activeJobDialog = null; });
+        dlg.setOnShowListener(v -> dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(w -> {
+            try {
+                EmploymentPeriod p=new EmploymentPeriod(state.employer.getText().toString().trim(), LocalDate.parse(state.start.getText().toString().trim()),
+                        state.end.getText().toString().trim().isEmpty()?null:LocalDate.parse(state.end.getText().toString().trim()),
+                        Long.parseLong(state.gross.getText().toString().trim()), state.insured.isChecked(), parseInt(state.unpaid), parseInt(state.sick));
+                if (p.employer.isEmpty()) { toast("Add meg a munkáltató vagy jogviszony nevét."); return; }
+                if (state.editIndex >= 0 && state.editIndex < jobs.size()) jobs.set(state.editIndex, p); else jobs.add(p);
+                renderJobs(); dlg.dismiss();
+            } catch(Exception e) { toast("Hibás vagy hiányzó dátum/összeg. Dátumpélda: 2026-08-23"); }
+        }));
+        dlg.show();
+    }
+
+    private void analyzeContractIntoJob(Uri uri) {
+        JobDialogState state = activeJobDialog;
+        if (state == null) return;
+        String key=SecureStore.getApiKey(this); if(key.isEmpty()){showSettings();return;}
+        state.aiStatus.setText("AI elemzés folyamatban…"); state.aiStatus.setTextColor(roseDark);
+        ProgressDialog p=new ProgressDialog(this); p.setTitle("Munkaszerződés elemzése"); p.setMessage("Az AI kiolvassa a munkaviszony adatait…"); p.setIndeterminate(true); p.setCancelable(false); p.show();
+        new Thread(() -> {
+            try {
+                OpenAIClient.EmploymentExtraction e=OpenAIClient.extractEmploymentData(this,uri,key,SecureStore.getModel(this));
+                runOnUiThread(() -> {
+                    p.dismiss();
+                    if (activeJobDialog != state) return;
+                    if (!e.employer.isEmpty()) state.employer.setText(e.employer);
+                    if (!e.start.isEmpty()) state.start.setText(e.start);
+                    if (!e.end.isEmpty()) state.end.setText(e.end); else if (e.ongoing) state.end.setText("");
+                    if (e.monthlyGross > 0) state.gross.setText(String.valueOf(e.monthlyGross));
+                    if (e.sickPayDays >= 0) state.sick.setText(String.valueOf(e.sickPayDays));
+                    if (e.unpaidDays >= 0) state.unpaid.setText(String.valueOf(e.unpaidDays));
+                    state.insured.setChecked(e.insured);
+                    state.aiStatus.setText("✓ AI kitöltés elkészült" + (e.notes.isEmpty()?"":" • "+e.notes));
+                    state.aiStatus.setTextColor(Color.rgb(65,126,94));
+                    showHelp("AI kitöltés elkészült", "A felismert adatokat beírtam a mezőkbe. Mentés előtt ellenőrizd őket, és szükség esetén módosítsd kézzel.\n\n" + (e.notes.isEmpty()?"Az AI nem jelzett külön bizonytalanságot.":e.notes));
+                });
+            } catch(Exception e) { runOnUiThread(() -> {p.dismiss(); if(activeJobDialog==state){state.aiStatus.setText("AI elemzés sikertelen");state.aiStatus.setTextColor(Color.rgb(173,91,67));} showHelp("Elemzési hiba", e.getMessage()==null?"Ismeretlen hiba":e.getMessage());}); }
+        }).start();
+    }
+
+    private int parseInt(EditText e){ try{return Integer.parseInt(e.getText().toString());}catch(Exception x){return 0;} }
+    private void loadSample(){ jobs.clear(); jobs.add(new EmploymentPeriod("Minta Kft.",LocalDate.now().minusYears(2),null,650000,true,0,20)); renderJobs(); }
+
+    private void renderJobs() {
+        if (jobsBox == null) return;
+        jobsBox.removeAllViews();
+        if (jobs.isEmpty()) { TextView empty=text("Még nincs hozzáadott jogviszony.",13,false); empty.setTextColor(muted); jobsBox.addView(empty); return; }
+        for (int idx=0; idx<jobs.size(); idx++) {
+            EmploymentPeriod p=jobs.get(idx); final int removeIndex=idx;
+            LinearLayout
