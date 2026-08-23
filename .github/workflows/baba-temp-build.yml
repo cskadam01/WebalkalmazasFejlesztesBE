@@ -1,0 +1,39 @@
+name: Temporary BabaEllatas APK Build
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/baba-temp-build.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: baba-apk-build
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build APK
+        run: cd baba-app && gradle assembleDebug --stacktrace
+      - name: Verify and publish APK to isolated branch
+        run: |
+          test -f baba-app/app/build/outputs/apk/debug/app-debug.apk
+          unzip -t baba-app/app/build/outputs/apk/debug/app-debug.apk >/dev/null
+          mkdir -p apk-output
+          cp baba-app/app/build/outputs/apk/debug/app-debug.apk apk-output/BabaEllatas-2026.apk
+          sha256sum apk-output/BabaEllatas-2026.apk > apk-output/BabaEllatas-2026.sha256
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apk-output/BabaEllatas-2026.apk apk-output/BabaEllatas-2026.sha256
+          git commit -m "Publish BabaEllatas 2026 APK"
+          git push origin HEAD:baba-apk-build
