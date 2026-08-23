@@ -1,0 +1,82 @@
+on calc = button("Kiszámítom a CSED-et és GYED-et"); calc.setOnClickListener(v -> calculate()); c.addView(calc);
+        resultBox = new LinearLayout(this); resultBox.setOrientation(LinearLayout.VERTICAL); c.addView(resultBox);
+        shareButton = secondaryButton("↗ Eredmény megosztása");
+        shareButton.setVisibility(View.GONE); shareButton.setOnClickListener(v -> shareResult()); c.addView(shareButton);
+        root.addView(c);
+    }
+
+    private void addFooter() {
+        TextView note = text("Tervezési segédlet • nem hatósági határozat", 11, false);
+        note.setTextColor(muted); note.setGravity(Gravity.CENTER); note.setPadding(0, dp(10), 0, 0); root.addView(note);
+    }
+
+    private LinearLayout sectionHeader(String title, String helpText, String helpTitle) {
+        LinearLayout h = horizontal(); h.setGravity(Gravity.CENTER_VERTICAL);
+        TextView t = text(title, 19, true); t.setTextColor(ink); h.addView(t, new LinearLayout.LayoutParams(0, -2, 1));
+        Button q = questionButton(); q.setOnClickListener(v -> showHelp(helpTitle, helpText)); h.addView(q);
+        return h;
+    }
+
+    private void showGeneralHelp() {
+        showHelp("BabaEllátás súgó",
+                "A főképernyőn csak a szükséges adatokat látod. A ? gombok részletes magyarázatot nyitnak meg.\n\n" +
+                "1. Add meg a várható szülési dátumot.\n2. A Munkák és bérek résznél rögzítsd az elmúlt 2+ év jogviszonyait.\n3. Új munka felvitelekor opcionálisan csatolj munkaszerződést; az AI kitölti az adatmezőket.\n4. A mentett munkák a Szerkesztés gombbal módosíthatók.\n5. Futtasd a kalkulációt, majd az eredményt megoszthatod.\n\n" +
+                "A munkaszerződés AI-feldolgozása a Beállításokban elmentett OpenAI API-kulcsot használja.");
+    }
+
+    private void showHelp(String title, String message) {
+        new AlertDialog.Builder(this).setTitle(title).setMessage(message).setPositiveButton("Rendben", null).show();
+    }
+
+    private void showSettings() {
+        LinearLayout x = new LinearLayout(this); x.setOrientation(LinearLayout.VERTICAL); x.setPadding(dp(18), dp(6), dp(18), 0);
+        TextView apiLabel = label("OpenAI API-kulcs"); x.addView(apiLabel);
+        EditText api = input("sk-..."); api.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        String current = SecureStore.getApiKey(this); if (!current.isEmpty()) api.setText(current); x.addView(api);
+        TextView modelLabel = label("OpenAI modell"); modelLabel.setPadding(0,dp(12),0,0); x.addView(modelLabel);
+        EditText model = input("gpt-5.4-mini"); model.setText(SecureStore.getModel(this)); x.addView(model);
+        TextView info = text("A kulcs AES-GCM titkosítással, Android Keystore által védett kulccsal kerül mentésre ezen az eszközön. Közvetlen mobil API-használat személyes/teszt célra alkalmas; nyilvánosan terjesztett alkalmazásnál biztonságosabb saját backend használata.", 12, false);
+        info.setTextColor(muted); info.setPadding(0,dp(12),0,0); x.addView(info);
+        AlertDialog dlg = new AlertDialog.Builder(this).setTitle("Beállítások").setView(x)
+                .setPositiveButton("Mentés", null).setNegativeButton("Mégse", null)
+                .setNeutralButton("Kulcs törlése", null).create();
+        dlg.setOnShowListener(v -> {
+            dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(w -> {
+                try {
+                    SecureStore.saveApiKey(this, api.getText().toString());
+                    SecureStore.saveModel(this, model.getText().toString().trim().isEmpty()?"gpt-5.4-mini":model.getText().toString().trim());
+                    toast("Beállítások elmentve"); dlg.dismiss(); rebuildUi();
+                } catch (Exception e) { toast("A kulcs mentése nem sikerült: " + e.getMessage()); }
+            });
+            dlg.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(w -> {
+                try { SecureStore.saveApiKey(this, ""); toast("API-kulcs törölve"); dlg.dismiss(); rebuildUi(); }
+                catch (Exception e) { toast("Törlési hiba"); }
+            });
+        });
+        dlg.show();
+    }
+
+    private void rebuildUi() { root.removeAllViews(); addTopBar(); addHero(); addBabyCard(); addJobsCard(); renderJobs(); addCalculateCard(); addFooter(); }
+
+    private void showJobDialog(int editIndex) {
+        EmploymentPeriod existing = editIndex >= 0 && editIndex < jobs.size() ? jobs.get(editIndex) : null;
+        JobDialogState state = new JobDialogState();
+        state.editIndex = editIndex;
+
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout x = new LinearLayout(this); x.setOrientation(LinearLayout.VERTICAL); x.setPadding(dp(16), dp(4), dp(16), dp(12));
+        scroll.addView(x);
+
+        TextView aiIntro = text("Munkaszerződésből automatikus kitöltés", 13, true); aiIntro.setTextColor(roseDark); x.addView(aiIntro);
+        TextView aiHint = text("PDF vagy más támogatott munkaszerződés csatolható. Az AI által felismert adatokat mindig ellenőrizd mentés előtt.", 12, false); aiHint.setTextColor(muted); x.addView(aiHint);
+        Button contract = secondaryButton("📎 Munkaszerződés betöltése AI-val"); x.addView(contract);
+        state.aiStatus = text(SecureStore.getApiKey(this).isEmpty() ? "OpenAI API-kulcs nincs beállítva." : "OpenAI készen áll a dokumentum feldolgozására.", 11, false);
+        state.aiStatus.setTextColor(SecureStore.getApiKey(this).isEmpty() ? Color.rgb(173,91,67) : Color.rgb(65,126,94));
+        x.addView(state.aiStatus);
+
+        TextView manual = label("Munkaviszony adatai"); manual.setPadding(0,dp(12),0,0); x.addView(manual);
+        state.employer=input("Munkáltató / jogviszony neve");
+        state.start=input("Kezdet ÉÉÉÉ-HH-NN");
+        state.end=input("Vége ÉÉÉÉ-HH-NN (üres = fennáll)");
+        state.gross=input("Havi bruttó Ft"); state.gross.setInputType(InputType.TYPE_CLASS_NUMBER);
+        state.sick=input("Táppénzes napok"); state.sick.setInputType(InputType.TYPE_CLASS_NUMBER);
