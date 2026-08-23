@@ -1,0 +1,94 @@
+package hu.babatamogatas.app;
+
+import android.content.ContentResolver;
+import android.content.Context;
+import android.database.Cursor;
+import android.net.Uri;
+import android.provider.OpenableColumns;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+
+public final class OpenAIClient {
+    private OpenAIClient() {}
+
+    public static final class EmploymentExtraction {
+        public String employer = "";
+        public String start = "";
+        public String end = "";
+        public long monthlyGross = 0;
+        public int sickPayDays = -1;
+        public int unpaidDays = -1;
+        public boolean insured = true;
+        public boolean ongoing = false;
+        public String notes = "";
+    }
+
+    public static EmploymentExtraction extractEmploymentData(Context context, Uri uri, String apiKey, String model) throws Exception {
+        String fileName = getFileName(context.getContentResolver(), uri);
+        String mime = context.getContentResolver().getType(uri);
+        if (mime == null) mime = "application/octet-stream";
+        String fileId = uploadFile(context, uri, fileName, mime, apiKey);
+        String text = createStructuredResponse(fileId, apiKey, model);
+        return parseEmploymentExtraction(text);
+    }
+
+
+    public static String analyzeEmploymentDocument(Context context, Uri uri, String apiKey, String model) throws Exception {
+        String fileName = getFileName(context.getContentResolver(), uri);
+        String mime = context.getContentResolver().getType(uri);
+        if (mime == null) mime = "application/octet-stream";
+        String fileId = uploadFile(context, uri, fileName, mime, apiKey);
+        return createResponse(fileId, apiKey, model);
+    }
+
+    private static String uploadFile(Context context, Uri uri, String fileName, String mime, String apiKey) throws Exception {
+        String boundary = "----BabaEllatas" + System.currentTimeMillis();
+        HttpURLConnection c = (HttpURLConnection) new URL("https://api.openai.com/v1/files").openConnection();
+        c.setRequestMethod("POST"); c.setDoOutput(true); c.setConnectTimeout(30000); c.setReadTimeout(60000);
+        c.setRequestProperty("Authorization", "Bearer " + apiKey);
+        c.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+        try (OutputStream out = c.getOutputStream(); InputStream in = context.getContentResolver().openInputStream(uri)) {
+            write(out, "--"+boundary+"\r\nContent-Disposition: form-data; name=\"purpose\"\r\n\r\nuser_data\r\n");
+            write(out, "--"+boundary+"\r\nContent-Disposition: form-data; name=\"file\"; filename=\""+safe(fileName)+"\"\r\nContent-Type: "+mime+"\r\n\r\n");
+            if (in == null) throw new IOException("A fájl nem olvasható");
+            byte[] buf = new byte[8192]; int n; while((n=in.read(buf))!=-1) out.write(buf,0,n);
+            write(out, "\r\n--"+boundary+"--\r\n");
+        }
+        String body = readResponse(c);
+        if (c.getResponseCode()/100 != 2) throw new IOException("OpenAI fájlfeltöltési hiba: " + compactError(body));
+        return new JSONObject(body).getString("id");
+    }
+
+    private static String createResponse(String fileId, String apiKey, String model) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL("https://api.openai.com/v1/responses").openConnection();
+        c.setRequestMethod("POST"); c.setDoOutput(true); c.setConnectTimeout(30000); c.setReadTimeout(90000);
+        c.setRequestProperty("Authorization", "Bearer " + apiKey);
+        c.setRequestProperty("Content-Type", "application/json");
+        String prompt = "Elemezd a csatolt magyar munkaszerződést vagy jövedelemigazolást CSED/GYED kalkulációhoz. " +
+                "Adj rövid, magyar nyelvű összefoglalót: munkáltató, jogviszony típusa, kezdete, vége/fennáll-e, havi bruttó bér, " +
+                "azonosítható bérváltozások, táppénz/fizetés nélküli idő ha szerepel, és minden bizonytalanság. Ne találj ki hiányzó adatot.";
+        JSONObject req = new JSONObject(); req.put("model", model == null || model.trim().isEmpty() ? "gpt-5.4-mini" : model.trim());
+        JSONArray input = new JSONArray(); JSONObject msg = new JSONObject(); msg.put("role","user");
+        JSONArray content = new JSONArray();
+        content.put(new JSONObject().put("type","input_text").put("text",prompt));
+        content.put(new JSONObject().put("type","input_file").put("file_id",fileId));
+        msg.put("content",content); input.put(msg); req.put("input",input); req.put("store",false);
+        byte[] bytes=req.toString().getBytes(StandardCharsets.UTF_8); c.setFixedLengthStreamingMode(bytes.length);
+        try(OutputStream out=c.getOutputStream()){out.write(bytes);} String body=readResponse(c);
+        if(c.getResponseCode()/100!=2) throw new IOException("OpenAI elemzési hiba: "+compactError(body));
+        JSONObject root=new JSONObject(body);
+        String direct=root.optString("output_text",""); if(!direct.isEmpty()) return direct;
+        JSONArray output=root.optJSONArray("output"); StringBuilder sb=new StringBuilder();
+        if(output!=null) for(int i=0;i<output.length();i++){ JSONObject item=output.optJSONObject(i); if(item==null)continue; JSONArray arr=item.optJSONArray("content"); if(arr==null)continue; for(int j=0;j<arr.length();j++){JSONObject part=arr.optJSONObject(j); if(part!=null){String t=part.optString("text",""); if(!t.isEmpty()) sb.append(t).append('\n');}}}
+        return sb.length()==0?"Az elemzés elkészült, de nem érkezett megjeleníthető szöveg.":sb.toString().trim();
+    }
+
+    private static String createStructuredResponse(String fileId, String apiKey, String model) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL("https://api.openai.com/v1/responses").openConnection();
+        c.setRequestMethod("POST"); c.setDoOutput(true); c.setConnectTimeout(3000
