@@ -3,6 +3,8 @@ name: Build BabaEllatas v1.8 APK
 on:
   push:
     branches: [baba-v18-build]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
