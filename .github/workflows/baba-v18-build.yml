@@ -42,7 +42,7 @@ jobs:
         working-directory: /tmp/baba-v110-src
         shell: bash
         run: |
-          cat "$GITHUB_WORKSPACE"/baba-v110-patch/p00 "$GITHUB_WORKSPACE"/baba-v110-patch/p01 "$GITHUB_WORKSPACE"/baba-v110-patch/p02 "$GITHUB_WORKSPACE"/baba-v110-patch/p03 "$GITHUB_WORKSPACE"/baba-v110-patch/p04 > /tmp/v110.patch.b64
+          cat "$GITHUB_WORKSPACE"/baba-v110-patch/p00 "$GITHUB_WORKSPACE"/baba-v110-patch/p01 "$GITHUB_WORKSPACE"/baba-v110-patch/p02 "$GITHUB_WORKSPACE"/baba-v110-patch/p03 "$GITHUB_WORKSPACE"/baba-v110-patch/q00 "$GITHUB_WORKSPACE"/baba-v110-patch/q01 "$GITHUB_WORKSPACE"/baba-v110-patch/q02 "$GITHUB_WORKSPACE"/baba-v110-patch/q03 "$GITHUB_WORKSPACE"/baba-v110-patch/q04 > /tmp/v110.patch.b64
           base64 -d /tmp/v110.patch.b64 > /tmp/v110.patch
           patch -p1 < /tmp/v110.patch
           grep -q "versionName '1.10.0'" app/build.gradle
