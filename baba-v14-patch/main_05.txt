@@ -1,0 +1,65 @@
+ow.addView(btns);
+            jobsBox.addView(row);
+        }
+    }
+
+    private void calculate() {
+        resultBox.removeAllViews();
+        try {
+            LocalDate due=LocalDate.parse(dueDate.getText().toString().trim());
+            CalculationResult r=CalculatorEngine.calculate(due,earlyCsed.isChecked(),jobs,workAfter90.isChecked(),contributionRelief.isChecked());
+            resultBox.addView(resultPill(r.csedEligible && r.gyedEligible ? "✓ Jogosultság valószínű" : "! Jogosultság ellenőrzendő", r.csedEligible && r.gyedEligible));
+            resultBox.addView(resultPill((r.insurance365Met?"✓":"!")+" Előzetes biztosítás: "+r.insuredDaysInTwoYears+" / 365 nap", r.insurance365Met));
+            resultBox.addView(resultSection("CSED", "Kezdet", String.valueOf(r.csedStart), "Bruttó / hó", money(r.csedGrossMonthly), "Nettó / hó", money(r.csedNetMonthly)));
+            resultBox.addView(resultSection("GYED", "Várható kezdet", String.valueOf(r.gyedStart), "Bruttó / hó", money(r.gyedGrossMonthly), "Nettó / hó", money(r.gyedNetMonthly)));
+            TextView details=text("A 365 napnak nem kell folyamatosnak lennie.\nCSED szüléskori/passzív feltétel: "+(r.csedConnectionMet?"rendben":"ellenőrzendő")+"\nGYED kezdőkori státusz: "+(r.gyedStatusMet?"rendben":"ellenőrzendő")+"\nGYED 2026 plafon: "+money(r.gyedMaximum)+"\nCSED szabály: "+r.csedRule+"\nGYED szabály: "+r.gyedRule,12,false); details.setTextColor(muted); resultBox.addView(details);
+            if(!r.suggestions.isEmpty()) resultBox.addView(infoBlock("Javaslatok", r.suggestions));
+            if(!r.warnings.isEmpty()) resultBox.addView(infoBlock("Ellenőrizendő", r.warnings));
+            lastShareText = buildShareText(due, r);
+            shareButton.setVisibility(View.VISIBLE);
+        } catch(Exception e) { toast("Add meg a várható szülés dátumát és legalább egy jogviszonyt."); }
+    }
+
+    private String buildShareText(LocalDate due, CalculationResult r) {
+        StringBuilder s=new StringBuilder();
+        s.append("BabaEllátás 2026 – CSED/GYED kalkuláció\n\n");
+        s.append("Várható szülés: ").append(due).append("\n");
+        s.append("Előzetes biztosítás a megelőző 2 évben: ").append(r.insuredDaysInTwoYears).append(" / 365 nap – ").append(r.insurance365Met?"teljesül":"nem igazolható").append("\nA 365 napnak nem kell folyamatosnak lennie.\n\n");
+        s.append("CSED\nJogosultsági becslés: ").append(r.csedEligible?"valószínűleg jogosult":"ellenőrizendő").append("\nKezdet: ").append(r.csedStart)
+                .append("\nBruttó/hó: ").append(money(r.csedGrossMonthly)).append("\nNettó/hó: ").append(money(r.csedNetMonthly)).append("\n\n");
+        s.append("GYED\nJogosultsági becslés: ").append(r.gyedEligible?"valószínűleg jogosult":"ellenőrizendő").append("\nKezdet: ").append(r.gyedStart)
+                .append("\nVége: ").append(r.gyedEnd).append("\nBruttó/hó: ").append(money(r.gyedGrossMonthly)).append("\nNettó/hó: ").append(money(r.gyedNetMonthly))
+                .append("\n2026-os plafon: ").append(money(r.gyedMaximum)).append("\n\n");
+        if(!r.suggestions.isEmpty()){s.append("Javaslatok:\n");for(String x:r.suggestions)s.append("• ").append(x).append("\n");}
+        if(!r.warnings.isEmpty()){s.append("\nEllenőrizendő:\n");for(String x:r.warnings)s.append("• ").append(x).append("\n");}
+        s.append("\nTervezési segédlet, nem hatósági határozat.");
+        return s.toString();
+    }
+
+    private void shareResult() {
+        if(lastShareText.isEmpty()){toast("Előbb készíts kalkulációt.");return;}
+        try {
+            File f=new File(getCacheDir(),"BabaEllatas_eredmeny.txt");
+            try(FileOutputStream out=new FileOutputStream(f)){out.write(lastShareText.getBytes(StandardCharsets.UTF_8));}
+            Uri uri=Uri.parse("content://"+getPackageName()+".share/"+f.getName());
+            Intent send=new Intent(Intent.ACTION_SEND); send.setType("text/plain"); send.putExtra(Intent.EXTRA_TEXT,lastShareText); send.putExtra(Intent.EXTRA_STREAM,uri);
+            send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(send,"BabaEllátás eredmény megosztása"));
+        } catch(Exception e){toast("A megosztás nem sikerült: "+e.getMessage());}
+    }
+
+    @Override protected void onActivityResult(int req,int res,Intent data) {
+        super.onActivityResult(req,res,data);
+        if(req==REQ_JOB_DOCUMENT && res==RESULT_OK && data!=null && data.getData()!=null) analyzeDocumentIntoJob(data.getData());
+        if(req==REQ_BATCH_DOCUMENTS && res==RESULT_OK && data!=null && activeBatchImport!=null){
+            activeBatchImport.uris.clear();
+            if(data.getClipData()!=null){for(int i=0;i<data.getClipData().getItemCount();i++)activeBatchImport.uris.add(data.getClipData().getItemAt(i).getUri());}
+            else if(data.getData()!=null)activeBatchImport.uris.add(data.getData());
+            updateBatchSelectedInfo(activeBatchImport);
+        }
+    }
+
+    private LinearLayout resultSection(String title,String l1,String v1,String l2,String v2,String l3,String v3){
+        LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(dp(12),dp(10),dp(12),dp(10));box.setBackgroundResource(R.drawable.result_bg);
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.setMargins(0,dp(8),0,0);box.setLayoutParams(lp);
+        TextView h=text(title,17,true);h.setTextColor(roseDark);box.addView(h); box.addView(keyValue(l1,v1));box.a
