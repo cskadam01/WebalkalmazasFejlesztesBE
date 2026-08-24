@@ -1,0 +1,35 @@
+eButton("Mégse", null).show();
+            return;
+        }
+        BatchImportState state = new BatchImportState();
+        LinearLayout x = new LinearLayout(this); x.setOrientation(LinearLayout.VERTICAL); x.setPadding(dp(16), dp(6), dp(16), dp(10));
+        TextView info = text("Egyszerre több dokumentumot is kiválaszthatsz. Az AI a teljes csomagot együtt értelmezi, összekapcsolja az ugyanahhoz a jogviszonyhoz tartozó szerződést, munkaköri leírást, bér- vagy járulékpapírt és táppénzes igazolást, majd létrehozza a teljes munkalistát.",12,false); info.setTextColor(muted); x.addView(info);
+        Button choose = secondaryButton("📎 Több fájl kiválasztása"); x.addView(choose);
+        state.selectedInfo = text("Még nincs kiválasztott fájl.",11,false); state.selectedInfo.setTextColor(muted); x.addView(state.selectedInfo);
+        TextView notesLabel = label("Kiegészítő információ az AI-nak"); notesLabel.setPadding(0,dp(12),0,0); x.addView(notesLabel);
+        state.notes = new EditText(this); state.notes.setHint("Pl. 2025-ben ez a megbízás havi volt; a két táppénzes papír ugyanahhoz a munkaviszonyhoz tartozik…"); state.notes.setMinLines(4); state.notes.setGravity(Gravity.TOP); state.notes.setTextColor(ink); state.notes.setHintTextColor(Color.rgb(155,140,146)); state.notes.setBackgroundResource(R.drawable.input_bg); state.notes.setPadding(dp(12),dp(10),dp(12),dp(10)); x.addView(state.notes,new LinearLayout.LayoutParams(-1,dp(120)));
+        AlertDialog dlg = new AlertDialog.Builder(this).setTitle("AI teljes import").setView(x).setPositiveButton("Elemzés és lista összeállítása",null).setNegativeButton("Mégse",null).create();
+        state.dialog=dlg; activeBatchImport=state;
+        choose.setOnClickListener(v -> { Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT); i.setType("*/*"); i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true); i.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/pdf","image/jpeg","image/png","image/webp","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","text/plain"}); i.addCategory(Intent.CATEGORY_OPENABLE); startActivityForResult(i,REQ_BATCH_DOCUMENTS); });
+        dlg.setOnDismissListener(d -> { if(activeBatchImport==state) activeBatchImport=null; });
+        dlg.setOnShowListener(v -> dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(w -> { if(state.uris.isEmpty()){toast("Válassz ki legalább egy fájlt.");return;} analyzeBatchImport(state); }));
+        dlg.show();
+    }
+
+    private void updateBatchSelectedInfo(BatchImportState state) {
+        if(state==null)return; state.selectedInfo.setText(state.uris.isEmpty()?"Még nincs kiválasztott fájl.":("Kiválasztott fájlok: "+state.uris.size()+" db\nAz AI ezeket egyetlen közös elemzésben dolgozza fel."));
+    }
+
+    private void analyzeBatchImport(BatchImportState state) {
+        String key=SecureStore.getApiKey(this); if(key.isEmpty()){showSettings();return;}
+        ProgressDialog p=new ProgressDialog(this); p.setTitle("Teljes dokumentumcsomag elemzése"); p.setMessage("Fájlok feltöltése, jogviszonyok összekapcsolása és a teljes lista összeállítása…"); p.setIndeterminate(true); p.setCancelable(false); p.show();
+        String userNotes=state.notes.getText().toString().trim(); List<Uri> selected=new ArrayList<>(state.uris);
+        new Thread(() -> { try { OpenAIClient.BatchExtraction result=OpenAIClient.extractEmploymentBatch(this,selected,userNotes,key,SecureStore.getModel(this)); runOnUiThread(() -> { p.dismiss(); if(activeBatchImport!=state)return; if(result.jobs.isEmpty()){showHelp("Nincs létrehozható jogviszony","Az AI nem talált kellően alátámasztott munkaviszonyt vagy más biztosítási jogviszonyt a csomagban. Ellenőrizd a fájlokat és próbáld újra.");return;} jobs.clear(); for(OpenAIClient.EmploymentExtraction e:result.jobs){ try { String rel=e.relationType.isEmpty()?"Egyéb":e.relationType; LocalDate st=LocalDate.parse(!e.start.isEmpty()?e.start:e.evidenceStart); LocalDate en=(e.ongoing||e.end.isEmpty())?null:LocalDate.parse(e.end); boolean insured="igen".equals(e.insuredStatus)||e.insuranceEvidence||"Tartós megbízás".equals(rel); if("Normál megbízás".equals(rel)&&!e.insuranceEvidence&&e.monthlyGross>0) insured=CalculatorEngine.normalMandateLikelyInsured(st,e.monthlyGross); List<String> ev=new ArrayList<>(); ev.add("AI teljes import"+(e.notes.isEmpty()?"":" • "+e.notes)); jobs.add(new EmploymentPeriod(e.employer.isEmpty()?"Azonosítatlan jogviszony":e.employer,rel,st,en,e.monthlyGross,insured,Math.max(0,e.unpaidDays),Math.max(0,e.sickPayDays),ev)); } catch(Exception ignored){} } renderJobs(); state.dialog.dismiss(); String msg="Az AI "+jobs.size()+" jogviszonyt állított össze a "+selected.size()+" dokumentumból."+(result.notes.isEmpty()?"":"\n\n"+result.notes); showHelp("AI teljes import kész",msg+"\n\nMinden sort a Szerkesztés gombbal ellenőrizhetsz és módosíthatsz."); }); } catch(Exception e){ runOnUiThread(() -> { p.dismiss(); showHelp("AI-import hiba",e.getMessage()==null?"Ismeretlen hiba":e.getMessage()); }); } }).start();
+    }
+
+    private void showJobDialog(int editIndex) {
+        EmploymentPeriod existing = editIndex >= 0 && editIndex < jobs.size() ? jobs.get(editIndex) : null;
+        JobDialogState state = new JobDialogState(); state.editIndex = editIndex;
+        ScrollView scroll = new ScrollView(this); LinearLayout x = new LinearLayout(this); x.setOrientation(LinearLayout.VERTICAL); x.setPadding(dp(16), dp(4), dp(16), dp(12)); scroll.addView(x);
+
+       
