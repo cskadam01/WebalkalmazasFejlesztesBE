@@ -26,13 +26,16 @@ jobs:
           cat baba-v15-patch/part00.diff baba-v15-patch/part01.diff baba-v15-patch/part02.diff baba-v15-patch/part03.diff > /tmp/v15.patch
           cd baba-v15-build-dir
           patch -p1 < /tmp/v15.patch
+          patch -p1 < ../baba-v15-patch/fix01.diff
+          grep -q "versionCode 6" app/build.gradle
           grep -q "versionName '1.5.0'" app/build.gradle
+          grep -q "final String analysisNotes=userNotes" app/src/main/java/hu/babatamogatas/app/MainActivity.java
           grep -q "Jogosultsági adatcsomag" app/src/main/java/hu/babatamogatas/app/MainActivity.java
           grep -q "NEAK megnyitása" app/src/main/java/hu/babatamogatas/app/MainActivity.java
           grep -q "navContributionYears" app/src/main/java/hu/babatamogatas/app/OpenAIClient.java
           grep -q "munkavégzésre irányuló egyéb jogviszony" app/src/main/java/hu/babatamogatas/app/OpenAIClient.java
           grep -q "társas vállalkozó (munkaviszony mellett)" app/src/main/java/hu/babatamogatas/app/OpenAIClient.java
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
