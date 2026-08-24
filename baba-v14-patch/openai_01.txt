@@ -1,0 +1,59 @@
+és összegszámításhoz. A dokumentum lehet munkaszerződés, megbízási szerződés, 2026-tól tartós megbízási jogviszony irata, munkaköri leírás, bérjegyzék/jövedelemigazolás, táppénzes vagy keresőképtelenségi igazolás, TB/járulék/adó kimutatás, egyéni vállalkozói járulékpapír vagy ezek lefotózott képe. " +
+                "KIZÁRÓLAG egyetlen JSON objektumot adj vissza markdown nélkül ezekkel a kulcsokkal: " +
+                "documentType (egyik: MUNKASZERZODES, MEGBIZASI_SZERZODES, MUNKAKORI_LEIRAS, TAPPENZ_IGAZOLAS, BER_JOVEDELEM_IGAZOLAS, JARULEK_TB_KIMUTATAS, EGYEB), " +
+                "relationType (egyik: Munkaviszony, Normál megbízás, Tartós megbízás, Egyéni vállalkozó, Egyéb, vagy üres), " +
+                "employer (string), start (YYYY-MM-DD vagy üres), end (YYYY-MM-DD vagy üres), ongoing (boolean), " +
+                "evidenceStart és evidenceEnd (az a pontos időszak, amelyet a dokumentum ténylegesen igazol; YYYY-MM-DD vagy üres), " +
+                "monthlyGross (egész forint, 0 ha nem állapítható meg; munkaviszonynál havi bruttó/járulékalap, megbízásnál lehetőleg a járulékalapot képező havi jövedelem, ne a nettó kifizetés), " +
+                "sickPayDays (egész, -1 ha nincs adat), unpaidDays (egész, -1 ha nincs adat), " +
+                "insuredStatus (igen, nem vagy bizonytalan), insuranceEvidence (boolean: a dokumentum közvetlenül alátámaszt-e biztosítotti/TB-járulékfizetési státuszt az evidence időszakban), notes (rövid magyar magyarázat). " +
+                "Különösen fontos: egy adó- vagy járulékkimutatás végösszegét NE értelmezd havi munkabérként. Pozitív TB-járulék vagy biztosítotti bejelentés biztosítási bizonyíték lehet, de csak az igazolt időszakra. Táppénzes papírnál a keresőképtelenségi/táppénzes időszakot és napokat keresd; ne állítsd, hogy a táppénz önmagában megszakítja a biztosítást. " +
+                "Normál megbízásnál ne állíts biztosítotti státuszt pusztán a szerződés létezéséből: a járulékalapot képező jövedelem küszöbét vagy tényleges TB-járulékot kell vizsgálni. 2026-tól a tartós megbízás külön kategória. Ne találj ki hiányzó adatot.";
+    }
+
+    private static String uploadFile(Context context, Uri uri, String fileName, String mime, String apiKey) throws Exception {
+        String boundary = "----BabaEllatas" + System.currentTimeMillis();
+        HttpURLConnection c = (HttpURLConnection) new URL("https://api.openai.com/v1/files").openConnection();
+        c.setRequestMethod("POST"); c.setDoOutput(true); c.setConnectTimeout(30000); c.setReadTimeout(90000);
+        c.setRequestProperty("Authorization", "Bearer " + apiKey);
+        c.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+        try (OutputStream out = c.getOutputStream(); InputStream in = context.getContentResolver().openInputStream(uri)) {
+            write(out, "--"+boundary+"\r\nContent-Disposition: form-data; name=\"purpose\"\r\n\r\nuser_data\r\n");
+            write(out, "--"+boundary+"\r\nContent-Disposition: form-data; name=\"file\"; filename=\""+safe(fileName)+"\"\r\nContent-Type: "+mime+"\r\n\r\n");
+            if (in == null) throw new IOException("A fájl nem olvasható");
+            byte[] buf = new byte[8192]; int n; while((n=in.read(buf))!=-1) out.write(buf,0,n);
+            write(out, "\r\n--"+boundary+"--\r\n");
+        }
+        String body = readResponse(c);
+        if (c.getResponseCode()/100 != 2) throw new IOException("OpenAI fájlfeltöltési hiba: " + compactError(body));
+        return new JSONObject(body).getString("id");
+    }
+
+    private static String createResponseForFile(String fileId, String apiKey, String model, String prompt) throws Exception {
+        JSONArray content = new JSONArray();
+        content.put(new JSONObject().put("type","input_text").put("text",prompt));
+        content.put(new JSONObject().put("type","input_file").put("file_id",fileId));
+        return callResponses(content, apiKey, model);
+    }
+
+    private static String createResponseForImage(Context context, Uri uri, String mime, String apiKey, String model, String prompt) throws Exception {
+        byte[] bytes = readAll(context, uri, 18 * 1024 * 1024);
+        String dataUrl = "data:" + mime + ";base64," + Base64.encodeToString(bytes, Base64.NO_WRAP);
+        JSONArray content = new JSONArray();
+        content.put(new JSONObject().put("type","input_text").put("text",prompt));
+        content.put(new JSONObject().put("type","input_image").put("image_url",dataUrl).put("detail","high"));
+        return callResponses(content, apiKey, model);
+    }
+
+    private static byte[] readAll(Context context, Uri uri, int maxBytes) throws Exception {
+        try (InputStream in=context.getContentResolver().openInputStream(uri); ByteArrayOutputStream out=new ByteArrayOutputStream()) {
+            if(in==null) throw new IOException("A kép nem olvasható");
+            byte[] buf=new byte[8192]; int n,total=0;
+            while((n=in.read(buf))!=-1){total+=n;if(total>maxBytes)throw new IOException("A kép túl nagy a közvetlen AI-feldolgozáshoz (max. kb. 18 MB).");out.write(buf,0,n);} return out.toByteArray();
+        }
+    }
+
+    private static String callResponses(JSONArray content, String apiKey, String model) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL("https://api.openai.com/v1/responses").openConnection();
+        c.setRequestMethod("POST"); c.setDoOutput(true); c.setConnectTimeout(30000); c.setReadTimeout(120000);
+        c.setRequestProperty("A
