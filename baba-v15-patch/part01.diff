@@ -1,0 +1,34 @@
+eBatchImport(BatchImportState state) {
+         String key=SecureStore.getApiKey(this); if(key.isEmpty()){showSettings();return;}
+         ProgressDialog p=new ProgressDialog(this); p.setTitle("Teljes dokumentumcsomag elemzése"); p.setMessage("Fájlok feltöltése, jogviszonyok összekapcsolása és a teljes lista összeállítása…"); p.setIndeterminate(true); p.setCancelable(false); p.show();
+-        String userNotes=state.notes.getText().toString().trim(); List<Uri> selected=new ArrayList<>(state.uris);
+-        new Thread(() -> { try { OpenAIClient.BatchExtraction result=OpenAIClient.extractEmploymentBatch(this,selected,userNotes,key,SecureStore.getModel(this)); runOnUiThread(() -> { p.dismiss(); if(activeBatchImport!=state)return; if(result.jobs.isEmpty()){showHelp("Nincs létrehozható jogviszony","Az AI nem talált kellően alátámasztott munkaviszonyt vagy más biztosítási jogviszonyt a csomagban. Ellenőrizd a fájlokat és próbáld újra.");return;} jobs.clear(); for(OpenAIClient.EmploymentExtraction e:result.jobs){ try { String rel=e.relationType.isEmpty()?"Egyéb":e.relationType; LocalDate st=LocalDate.parse(!e.start.isEmpty()?e.start:e.evidenceStart); LocalDate en=(e.ongoing||e.end.isEmpty())?null:LocalDate.parse(e.end); boolean insured="igen".equals(e.insuredStatus)||e.insuranceEvidence||"Tartós megbízás".equals(rel); if("Normál megbízás".equals(rel)&&!e.insuranceEvidence&&e.monthlyGross>0) insured=CalculatorEngine.normalMandateLikelyInsured(st,e.monthlyGross); List<String> ev=new ArrayList<>(); ev.add("AI teljes import"+(e.notes.isEmpty()?"":" • "+e.notes)); jobs.add(new EmploymentPeriod(e.employer.isEmpty()?"Azonosítatlan jogviszony":e.employer,rel,st,en,e.monthlyGross,insured,Math.max(0,e.unpaidDays),Math.max(0,e.sickPayDays),ev)); } catch(Exception ignored){} } renderJobs(); state.dialog.dismiss(); String msg="Az AI "+jobs.size()+" jogviszonyt állított össze a "+selected.size()+" dokumentumból."+(result.notes.isEmpty()?"":"\n\n"+result.notes); showHelp("AI teljes import kész",msg+"\n\nMinden sort a Szerkesztés gombbal ellenőrizhetsz és módosíthatsz."); }); } catch(Exception e){ runOnUiThread(() -> { p.dismiss(); showHelp("AI-import hiba",e.getMessage()==null?"Ismeretlen hiba":e.getMessage()); }); } }).start();
++        String userNotes=state.notes.getText().toString().trim();
++        if(state.eligibilityPackage){
++            int y=LocalDate.now().getYear();
++            String work=state.plannedWorkEnd==null?"":state.plannedWorkEnd.getText().toString().trim();
++            String guided="VEZETETT JOGOSULTSÁGI ADATCSOMAG. Elvárt NAV évek: "+(y-2)+", "+(y-1)+", "+y+". A NEAK biztosítási jogviszony listát elsődleges időszaki forrásként kezeld. Tervezett utolsó munkanap: "+(work.isEmpty()?"nincs megadva":work)+".";
++            userNotes=guided+(userNotes.isEmpty()?"":" Felhasználói megjegyzés: "+userNotes);
++        }
++        List<Uri> selected=new ArrayList<>(state.uris);
++        new Thread(() -> { try { OpenAIClient.BatchExtraction result=OpenAIClient.extractEmploymentBatch(this,selected,userNotes,key,SecureStore.getModel(this)); runOnUiThread(() -> { p.dismiss(); if(activeBatchImport!=state)return; if(result.jobs.isEmpty()){showHelp("Nincs létrehozható jogviszony","Az AI nem talált kellően alátámasztott munkaviszonyt vagy más biztosítási jogviszonyt a csomagban. Ellenőrizd a fájlokat és próbáld újra.");return;} jobs.clear(); for(OpenAIClient.EmploymentExtraction e:result.jobs){ try { String rel=e.relationType.isEmpty()?"Egyéb":e.relationType; LocalDate st=LocalDate.parse(!e.start.isEmpty()?e.start:e.evidenceStart); LocalDate en=(e.ongoing||e.end.isEmpty())?null:LocalDate.parse(e.end); boolean insured="igen".equals(e.insuredStatus)||e.insuranceEvidence||"Tartós megbízás".equals(rel); if("Normál megbízás".equals(rel)&&!e.insuranceEvidence&&e.monthlyGross>0) insured=CalculatorEngine.normalMandateLikelyInsured(st,e.monthlyGross); List<String> ev=new ArrayList<>(); ev.add("AI teljes import"+(e.notes.isEmpty()?"":" • "+e.notes)); jobs.add(new EmploymentPeriod(e.employer.isEmpty()?"Azonosítatlan jogviszony":e.employer,rel,st,en,e.monthlyGross,insured,Math.max(0,e.unpaidDays),Math.max(0,e.sickPayDays),ev)); } catch(Exception ignored){} } renderJobs(); state.dialog.dismiss(); String msg="Az AI "+jobs.size()+" kalkulációs időszakot/jogviszonyt állított össze a "+selected.size()+" dokumentumból."+(result.coverageSummary().isEmpty()?"":"\n\nAdatcsomag-ellenőrzés:\n"+result.coverageSummary())+(result.notes.isEmpty()?"":"\n\n"+result.notes); showHelp(state.eligibilityPackage?"Jogosultsági adatcsomag feldolgozva":"AI teljes import kész",msg+"\n\nA lista a NAV havi járulékalap-változásai miatt ugyanazon munkáltatót több időszakra bonthatja. Minden sort a Szerkesztés gombbal ellenőrizhetsz és módosíthatsz."); }); } catch(Exception e){ runOnUiThread(() -> { p.dismiss(); showHelp("AI-import hiba",e.getMessage()==null?"Ismeretlen hiba":e.getMessage()); }); } }).start();
+     }
+ 
+     private void showJobDialog(int editIndex) {
+--- a/app/src/main/java/hu/babatamogatas/app/OpenAIClient.java
++++ b/app/src/main/java/hu/babatamogatas/app/OpenAIClient.java
+@@ -40,6 +40,23 @@
+     public static final class BatchExtraction {
+         public final List<EmploymentExtraction> jobs = new ArrayList<>();
+         public String notes = "";
++        public boolean neakInsuranceList = false;
++        public final List<Integer> navContributionYears = new ArrayList<>();
++        public int payslipMonths = 0;
++        public boolean sickPayDocuments = false;
++        public boolean contractDocuments = false;
++        public String coverageNotes = "";
++
++        public String coverageSummary() {
++            StringBuilder b = new StringBuilder();
++            b.append(neakInsuranceList ? "✓ NEAK biztosítási jogviszony lista felismerve" : "! NEAK biztosítási jogviszony lista nem azonosítható");
++            b.a
