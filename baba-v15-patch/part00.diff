@@ -1,0 +1,74 @@
+--- a/app/src/main/java/hu/babatamogatas/app/MainActivity.java
++++ b/app/src/main/java/hu/babatamogatas/app/MainActivity.java
+@@ -31,8 +31,9 @@
+ 
+     private static class BatchImportState {
+         AlertDialog dialog;
+-        EditText notes;
++        EditText notes, plannedWorkEnd;
+         TextView selectedInfo;
++        boolean eligibilityPackage = false;
+         final List<Uri> uris = new ArrayList<>();
+     }
+ 
+@@ -130,6 +131,9 @@
+         actions.addView(add, new LinearLayout.LayoutParams(0, -2, 1));
+         actions.addView(aiImport, new LinearLayout.LayoutParams(0, -2, 1));
+         c.addView(actions);
++        Button eligibilityPack = secondaryButton("📂 Jogosultsági adatcsomag");
++        eligibilityPack.setOnClickListener(v -> showEligibilityPackageDialog());
++        c.addView(eligibilityPack);
+         Button sample = secondaryButton("Minta"); sample.setOnClickListener(v -> loadSample()); c.addView(sample);
+         root.addView(c);
+     }
+@@ -197,6 +201,48 @@
+ 
+     private void rebuildUi() { root.removeAllViews(); addTopBar(); addHero(); addBabyCard(); addJobsCard(); renderJobs(); addCalculateCard(); addFooter(); }
+ 
++
++    private void showEligibilityPackageDialog() {
++        int y = LocalDate.now().getYear();
++        BatchImportState state = new BatchImportState(); state.eligibilityPackage = true;
++        ScrollView scroll = new ScrollView(this);
++        LinearLayout x = new LinearLayout(this); x.setOrientation(LinearLayout.VERTICAL); x.setPadding(dp(16),dp(6),dp(16),dp(12)); scroll.addView(x);
++
++        TextView intro = text("A pontosabb CSED/GYED elemzéshez töltsd fel együtt a hivatalos biztosítási és járulékadatokat. Az AI a NEAK-listát időszaki törzsadatként, a NAV-kivonatokat havi jövedelem- és járulékalapként használja, majd ezekhez kapcsolja a szerződéseket, bérlapokat és táppénzes iratokat.",12,false); intro.setTextColor(muted); x.addView(intro);
++
++        TextView need = text("Szükséges / javasolt adatcsomag:\n✓ NEAK biztosítási jogviszony lista\n✓ NAV járulékadat-kivonat: "+(y-2)+", "+(y-1)+" és "+y+"\n✓ Utolsó 8 havi bérlap\n✓ Munkaszerződés / megbízási szerződés és módosítások\n✓ Ha volt táppénz: kezdő/záró időszak és kifizetés/keresőképtelenség igazolása\n✓ Várható szülési dátum (a főképernyőn)\n✓ Ha még dolgozol: tervezett utolsó munkanap",12,true);
++        need.setTextColor(ink); need.setPadding(0,dp(10),0,dp(8)); x.addView(need);
++
++        LinearLayout links = horizontal();
++        Button neak = secondaryButton("NEAK megnyitása"); neak.setOnClickListener(v -> openExternalUrl("https://ugyfelkapu.neak.gov.hu/"));
++        Button nav = secondaryButton("NAV megnyitása"); nav.setOnClickListener(v -> openExternalUrl("https://ugyfelportal.nav.gov.hu/"));
++        links.addView(neak,new LinearLayout.LayoutParams(0,-2,1)); links.addView(nav,new LinearLayout.LayoutParams(0,-2,1)); x.addView(links);
++        TextView sourceHint=text("NEAK: biztosítási jogviszonyok / jogosultsági időszakok.  NAV: Magánszemélyek munkáltató által bevallott járulékadatainak lekérdezése, évenként letöltve.",11,false); sourceHint.setTextColor(muted); x.addView(sourceHint);
++
++        Button choose=secondaryButton("📎 Teljes adatcsomag kiválasztása"); x.addView(choose);
++        state.selectedInfo=text("Még nincs kiválasztott fájl.",11,false); state.selectedInfo.setTextColor(muted); x.addView(state.selectedInfo);
++        x.addView(label("Ha még dolgozol, meddig tervezel dolgozni?"));
++        state.plannedWorkEnd=input("ÉÉÉÉ-HH-NN vagy rövid szöveg"); x.addView(state.plannedWorkEnd);
++        TextView notesLabel=label("Kiegészítő információ az AI-nak"); notesLabel.setPadding(0,dp(10),0,0); x.addView(notesLabel);
++        state.notes=new EditText(this); state.notes.setHint("Pl. melyik táppénzes papír melyik munkahelyhez tartozik; melyik megbízás egyszeri; ismert bérváltozás stb."); state.notes.setMinLines(4); state.notes.setGravity(Gravity.TOP); state.notes.setTextColor(ink); state.notes.setHintTextColor(Color.rgb(155,140,146)); state.notes.setBackgroundResource(R.drawable.input_bg); state.notes.setPadding(dp(12),dp(10),dp(12),dp(10)); x.addView(state.notes,new LinearLayout.LayoutParams(-1,dp(120)));
++
++        AlertDialog dlg=new AlertDialog.Builder(this).setTitle("Jogosultsági dokumentumok / teljes adatcsomag").setView(scroll).setPositiveButton("AI elemzés és lista létrehozása",null).setNegativeButton("Mégse",null).create();
++        state.dialog=dlg; activeBatchImport=state;
++        choose.setOnClickListener(v -> { Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT); i.setType("*/*"); i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true); i.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/pdf","image/jpeg","image/png","image/webp","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","text/plain"}); i.addCategory(Intent.CATEGORY_OPENABLE); startActivityForResult(i,REQ_BATCH_DOCUMENTS); });
++        dlg.setOnDismissListener(d -> { if(activeBatchImport==state) activeBatchImport=null; });
++        dlg.setOnShowListener(v -> dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(w -> {
++            if(SecureStore.getApiKey(this).isEmpty()){ showSettings(); return; }
++            if(state.uris.isEmpty()){toast("Válaszd ki legalább a NEAK/NAV dokumentumokat.");return;}
++            analyzeBatchImport(state);
++        }));
++        dlg.show();
++    }
++
++    private void openExternalUrl(String url) {
++        try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
++        catch (Exception e) { toast("A hivatkozás nem nyitható meg ezen az eszközön."); }
++    }
++
+     private void showBatchImportDialog() {
+         if (SecureStore.getApiKey(this).isEmpty()) {
+             new AlertDialog.Builder(this).setTitle("OpenAI API-kulcs szükséges")
+@@ -226,8 +272,15 @@
+     private void analyz
