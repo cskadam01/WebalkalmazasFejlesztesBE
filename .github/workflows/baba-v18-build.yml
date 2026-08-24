@@ -12,42 +12,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Reconstruct v1.8 base source
+      - name: Verify and extract v1.10 source
         shell: bash
         run: |
-          cat baba-v18-final-b64/part00 baba-v18-final-b64/part01 baba-v18-final-b64/part02 baba-v18-final-b64/part03 baba-v18-final-b64/part04 baba-v18-final-b64/part05 baba-v18-final-b64/part06 baba-v18-final-b64/part07 > /tmp/baba-v18.b64
-          base64 -d /tmp/baba-v18.b64 > /tmp/BabaEllatas-v18.partial.zip
-          if unzip -t /tmp/BabaEllatas-v18.partial.zip; then
-            cp /tmp/BabaEllatas-v18.partial.zip /tmp/BabaEllatas-v18.zip
-          else
-            printf 'y\n' | zip -FF /tmp/BabaEllatas-v18.partial.zip --out /tmp/BabaEllatas-v18.zip
-            unzip -t /tmp/BabaEllatas-v18.zip
-          fi
+          unzip -t baba-v110-source.zip
           rm -rf /tmp/baba-v110-src
           mkdir -p /tmp/baba-v110-src
-          unzip -q /tmp/BabaEllatas-v18.zip -d /tmp/baba-v110-src
-
-      - name: Apply v1.9 fix
-        working-directory: /tmp/baba-v110-src
-        shell: bash
-        run: |
-          cat "$GITHUB_WORKSPACE"/baba-v19-patch/p00 "$GITHUB_WORKSPACE"/baba-v19-patch/p01 "$GITHUB_WORKSPACE"/baba-v19-patch/p02 "$GITHUB_WORKSPACE"/baba-v19-patch/p03 > /tmp/v19.patch.b64
-          base64 -d /tmp/v19.patch.b64 > /tmp/v19.patch
-          patch -p1 < /tmp/v19.patch
-          cat "$GITHUB_WORKSPACE"/baba-v19-patch/t00 "$GITHUB_WORKSPACE"/baba-v19-patch/t01 > /tmp/TestCalculatorV19.java.b64
-          base64 -d /tmp/TestCalculatorV19.java.b64 > engine-test/TestCalculatorV19.java
-          sed -i "s/versionCode 9/versionCode 10/; s/versionName '1.8.0'/versionName '1.9.0'/" app/build.gradle
-
-      - name: Apply v1.10 AI import and merge fix
-        working-directory: /tmp/baba-v110-src
-        shell: bash
-        run: |
-          cat "$GITHUB_WORKSPACE"/baba-v110-patch/p00 "$GITHUB_WORKSPACE"/baba-v110-patch/p01 "$GITHUB_WORKSPACE"/baba-v110-patch/p02 "$GITHUB_WORKSPACE"/baba-v110-patch/p03 "$GITHUB_WORKSPACE"/baba-v110-patch/q00 "$GITHUB_WORKSPACE"/baba-v110-patch/q01 "$GITHUB_WORKSPACE"/baba-v110-patch/q02 "$GITHUB_WORKSPACE"/baba-v110-patch/q03 "$GITHUB_WORKSPACE"/baba-v110-patch/q04 > /tmp/v110.patch.b64
-          base64 -d /tmp/v110.patch.b64 > /tmp/v110.patch
-          patch -p1 < /tmp/v110.patch
-          grep -q "versionName '1.10.0'" app/build.gradle
-          test -f app/src/main/java/hu/babatamogatas/app/EmploymentImportNormalizer.java
-          grep -q "auditPrompt" app/src/main/java/hu/babatamogatas/app/OpenAIClient.java
+          unzip -q baba-v110-source.zip -d /tmp/baba-v110-src
+          grep -q "versionName '1.10.0'" /tmp/baba-v110-src/app/build.gradle
+          test -f /tmp/baba-v110-src/app/src/main/java/hu/babatamogatas/app/EmploymentImportNormalizer.java
+          grep -q "auditPrompt" /tmp/baba-v110-src/app/src/main/java/hu/babatamogatas/app/OpenAIClient.java
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -60,7 +34,7 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Run all calculation and import regression tests
+      - name: Run calculation and import regression tests
         working-directory: /tmp/baba-v110-src
         shell: bash
         run: |
