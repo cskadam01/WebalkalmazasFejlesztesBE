@@ -14,15 +14,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Reconstruct v1.8 source ZIP
+      - name: Reconstruct and repair v1.8 source ZIP
         shell: bash
         run: |
           cat baba-v18-final-b64/part00 baba-v18-final-b64/part01 baba-v18-final-b64/part02 baba-v18-final-b64/part03 baba-v18-final-b64/part04 baba-v18-final-b64/part05 baba-v18-final-b64/part06 baba-v18-final-b64/part07 > /tmp/baba-v18.b64
-          base64 -d /tmp/baba-v18.b64 > /tmp/BabaEllatas-v1.8-source.zip
-          unzip -t /tmp/BabaEllatas-v1.8-source.zip
+          base64 -d /tmp/baba-v18.b64 > /tmp/BabaEllatas-v1.8-source.partial.zip
+          if unzip -t /tmp/BabaEllatas-v1.8-source.partial.zip; then
+            cp /tmp/BabaEllatas-v1.8-source.partial.zip /tmp/BabaEllatas-v1.8-source.zip
+          else
+            printf 'y\n' | zip -FF /tmp/BabaEllatas-v1.8-source.partial.zip --out /tmp/BabaEllatas-v1.8-source.zip
+            unzip -t /tmp/BabaEllatas-v1.8-source.zip
+          fi
+          rm -rf /tmp/baba-v18-src
           mkdir -p /tmp/baba-v18-src
           unzip -q /tmp/BabaEllatas-v1.8-source.zip -d /tmp/baba-v18-src
           test -f /tmp/baba-v18-src/app/build.gradle
+          test -f /tmp/baba-v18-src/app/src/main/java/hu/babatamogatas/app/CalculatorEngine.java
+          test -f /tmp/baba-v18-src/engine-test/TestCalculatorV18.java
           grep -q "versionName '1.8.0'" /tmp/baba-v18-src/app/build.gradle
 
       - name: Set up Java 17
@@ -40,7 +48,7 @@ jobs:
         working-directory: /tmp/baba-v18-src
         shell: bash
         run: |
-          mkdir -p /tmp/baba-v18-tests
+          rm -rf /tmp/baba-v18-tests && mkdir -p /tmp/baba-v18-tests
           javac -d /tmp/baba-v18-tests app/src/main/java/hu/babatamogatas/app/EmploymentPeriod.java app/src/main/java/hu/babatamogatas/app/CalculationResult.java app/src/main/java/hu/babatamogatas/app/CalculatorEngine.java engine-test/TestCalculatorV18.java
           java -cp /tmp/baba-v18-tests TestCalculatorV18
 
