@@ -1,0 +1,28 @@
+oJob(Uri uri) {
+        JobDialogState state=activeJobDialog;if(state==null)return;String key=SecureStore.getApiKey(this);if(key.isEmpty()){showSettings();return;}
+        state.aiStatus.setText("AI elemzés folyamatban…");state.aiStatus.setTextColor(roseDark);ProgressDialog p=new ProgressDialog(this);p.setTitle("Dokumentum elemzése");p.setMessage("Az AI felismeri a dokumentumtípust és a CSED/GYED szempontjából releváns adatokat…");p.setIndeterminate(true);p.setCancelable(false);p.show();
+        new Thread(()->{try{OpenAIClient.EmploymentExtraction e=OpenAIClient.extractEmploymentData(this,uri,key,SecureStore.getModel(this));runOnUiThread(()->{p.dismiss();if(activeJobDialog!=state)return;if(!e.relationType.isEmpty())selectSpinner(state.relationType,e.relationType);if(!e.employer.isEmpty())state.employer.setText(e.employer);if(!e.start.isEmpty())state.start.setText(e.start);else if(state.start.getText().toString().trim().isEmpty()&&!e.evidenceStart.isEmpty())state.start.setText(e.evidenceStart);if(!e.end.isEmpty())state.end.setText(e.end);else if(e.ongoing)state.end.setText("");else if(state.end.getText().toString().trim().isEmpty()&&!e.evidenceEnd.isEmpty()&&("JARULEK_TB_KIMUTATAS".equals(e.documentType)||"TAPPENZ_IGAZOLAS".equals(e.documentType)))state.end.setText(e.evidenceEnd);if(e.monthlyGross>0)state.gross.setText(String.valueOf(e.monthlyGross));if(e.sickPayDays>=0){int old=parseInt(state.sick);state.sick.setText(String.valueOf(Math.max(old,e.sickPayDays)));}if(e.unpaidDays>=0)state.unpaid.setText(String.valueOf(Math.max(parseInt(state.unpaid),e.unpaidDays)));if("igen".equals(e.insuredStatus)||e.insuranceEvidence)state.insured.setChecked(true);else if("nem".equals(e.insuredStatus))state.insured.setChecked(false);String evidence=(e.documentType.isEmpty()?"Dokumentum":e.documentType)+" • "+(e.evidenceStart.isEmpty()?"időszak nem azonosítható":e.evidenceStart+" – "+(e.evidenceEnd.isEmpty()?e.evidenceStart:e.evidenceEnd))+(e.insuranceEvidence?" • TB/biztosítás igazolva":"")+(e.notes.isEmpty()?"":" • "+e.notes);state.evidence.add(evidence);updateDocumentLog(state);state.aiStatus.setText("✓ AI-feldolgozás kész"+(e.insuranceEvidence?" • TB/biztosítás igazolva":""));state.aiStatus.setTextColor(Color.rgb(65,126,94));showHelp("Dokumentum feldolgozva","Típus: "+(e.documentType.isEmpty()?"nem egyértelmű":e.documentType)+"\nJogviszony: "+(e.relationType.isEmpty()?"nem egyértelmű":e.relationType)+"\n\nA felismerhető adatokat beírtam vagy kiegészítettem. A dokumentum nem írhat felül nem szereplő adatot; mentés előtt ellenőrizd a mezőket.\n\n"+(e.notes.isEmpty()?"Nincs külön AI-megjegyzés.":e.notes));});}catch(Exception e){runOnUiThread(()->{p.dismiss();if(activeJobDialog==state){state.aiStatus.setText("AI elemzés sikertelen");state.aiStatus.setTextColor(Color.rgb(173,91,67));}showHelp("Elemzési hiba",e.getMessage()==null?"Ismeretlen hiba":e.getMessage());});}}).start();
+    }
+
+    private void updateDocumentLog(JobDialogState state){if(state.evidence.isEmpty()){state.documentLog.setText("Még nincs feldolgozott dokumentum.");return;}StringBuilder b=new StringBuilder("Feldolgozott dokumentumok: "+state.evidence.size());for(String e:state.evidence)b.append("\n• ").append(e);state.documentLog.setText(b.toString());}
+    private void selectSpinner(Spinner spinner,String value){if(value==null)return;for(int i=0;i<spinner.getCount();i++)if(value.equalsIgnoreCase(String.valueOf(spinner.getItemAtPosition(i)))){spinner.setSelection(i);return;}}
+
+    private int parseInt(EditText e){ try{return Integer.parseInt(e.getText().toString());}catch(Exception x){return 0;} }
+    private void loadSample(){ jobs.clear(); jobs.add(new EmploymentPeriod("Minta Kft.","Munkaviszony",LocalDate.now().minusYears(2),null,650000,true,0,20,Collections.singletonList("MUNKASZERZODES • minta dokumentum"))); renderJobs(); }
+
+    private void renderJobs() {
+        if (jobsBox == null) return;
+        jobsBox.removeAllViews();
+        if (jobs.isEmpty()) { TextView empty=text("Még nincs hozzáadott jogviszony.",13,false); empty.setTextColor(muted); jobsBox.addView(empty); return; }
+        for (int idx=0; idx<jobs.size(); idx++) {
+            EmploymentPeriod p=jobs.get(idx); final int removeIndex=idx;
+            LinearLayout row=new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(10),dp(10),dp(8),dp(10)); row.setBackgroundResource(R.drawable.job_row_bg);
+            LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(-1,-2); rp.setMargins(0,dp(7),0,0); row.setLayoutParams(rp);
+            TextView t=text(p.employer+"\n"+p.relationType+" • "+p.start+" – "+(p.end==null?"fennáll":p.end)+"\n"+money(p.monthlyGross)+" bruttó/járulékalap • táppénz: "+p.sickPayDays+" nap • dokumentum: "+p.documentEvidence.size()+" db",13,false);
+            row.addView(t,new LinearLayout.LayoutParams(0,-2,1));
+            LinearLayout btns=new LinearLayout(this); btns.setOrientation(LinearLayout.VERTICAL);
+            Button edit=smallButton("Szerkesztés"); edit.setOnClickListener(v->showJobDialog(removeIndex)); btns.addView(edit);
+            Button del=smallButton("Törlés"); del.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Jogviszony törlése").setMessage("Biztosan törlöd ezt a munkát?" )
+                    .setPositiveButton("Törlés",(d,w)->{jobs.remove(removeIndex);renderJobs();}).setNegativeButton("Mégse",null).show()); btns.addView(del);
+            r
