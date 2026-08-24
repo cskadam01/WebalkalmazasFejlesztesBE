@@ -1,0 +1,88 @@
+package hu.babatamogatas.app;
+
+import android.content.ContentResolver;
+import android.content.Context;
+import android.database.Cursor;
+import android.net.Uri;
+import android.provider.OpenableColumns;
+import android.util.Base64;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+
+public final class OpenAIClient {
+    private OpenAIClient() {}
+
+    public static final class EmploymentExtraction {
+        public String documentType = "";
+        public String relationType = "";
+        public String employer = "";
+        public String start = "";
+        public String end = "";
+        public String evidenceStart = "";
+        public String evidenceEnd = "";
+        public long monthlyGross = 0;
+        public int sickPayDays = -1;
+        public int unpaidDays = -1;
+        public String insuredStatus = "bizonytalan";
+        public boolean insuranceEvidence = false;
+        public boolean ongoing = false;
+        public String notes = "";
+    }
+
+    public static final class BatchExtraction {
+        public final List<EmploymentExtraction> jobs = new ArrayList<>();
+        public String notes = "";
+    }
+
+    public static BatchExtraction extractEmploymentBatch(Context context, List<Uri> uris, String userNotes, String apiKey, String model) throws Exception {
+        JSONArray content = new JSONArray();
+        content.put(new JSONObject().put("type","input_text").put("text", batchPrompt(userNotes, uris == null ? 0 : uris.size())));
+        if (uris != null) for (Uri uri : uris) {
+            String mime = context.getContentResolver().getType(uri); if (mime == null) mime = "application/octet-stream";
+            if (mime.startsWith("image/")) {
+                byte[] bytes = readAll(context, uri, 18 * 1024 * 1024);
+                String dataUrl = "data:" + mime + ";base64," + Base64.encodeToString(bytes, Base64.NO_WRAP);
+                content.put(new JSONObject().put("type","input_image").put("image_url",dataUrl).put("detail","high"));
+            } else {
+                String fileName = getFileName(context.getContentResolver(), uri);
+                String fileId = uploadFile(context, uri, fileName, mime, apiKey);
+                content.put(new JSONObject().put("type","input_file").put("file_id",fileId));
+            }
+        }
+        return parseBatchExtraction(callResponses(content, apiKey, model));
+    }
+
+    private static String batchPrompt(String userNotes, int fileCount) {
+        return "Elemezd EGYÜTT ezt a teljes magyar CSED/GYED dokumentumcsomagot ("+fileCount+" fájl). A fájlok között lehet több munkaszerződés, megbízási/tartós megbízási szerződés, munkaköri leírás, módosítás, bér- vagy jövedelemigazolás, TB/járulék/adó kimutatás, egyéni vállalkozói irat és több táppénzes/keresőképtelenségi igazolás vagy ezek képe. " +
+                "A cél nem fájlonkénti külön válasz, hanem a személy TELJES, összevont jogviszonylistája. Kapcsold össze az ugyanahhoz a munkáltatóhoz/jogviszonyhoz tartozó dokumentumokat, vond össze az átfedő bizonyítékokat és a táppénzes papírokat a megfelelő jogviszonyhoz rendeld. Ne duplikáld ugyanazt a jogviszonyt csak azért, mert több irat tartozik hozzá. " +
+                "A felhasználó kiegészítő információja: " + (userNotes==null||userNotes.trim().isEmpty()?"nincs":userNotes.trim()) + ". " +
+                "KIZÁRÓLAG JSON objektumot adj markdown nélkül: {\"jobs\":[...],\"notes\":\"...\"}. A jobs minden eleme ugyanazokat a kulcsokat tartalmazza, mint az egyedi elemzés: documentType, relationType, employer, start, end, ongoing, evidenceStart, evidenceEnd, monthlyGross, sickPayDays, unpaidDays, insuredStatus, insuranceEvidence, notes. " +
+                "relationType: Munkaviszony, Normál megbízás, Tartós megbízás, Egyéni vállalkozó vagy Egyéb. Dátumok YYYY-MM-DD. A sickPayDays legyen az adott jogviszonyhoz a dokumentumcsomagból megbízhatóan összesíthető táppénzes/keresőképtelen napok száma, ha nincs adat -1. " +
+                "Nagyon fontos: járulék- vagy adópapír végösszegét NE kezeld havi bérként; pozitív TB-járulék biztosítási bizonyíték lehet csak az igazolt időszakra. Normál megbízásból ne következtess automatikusan biztosítottságra. A munkaköri leírás önmagában ne hozzon létre új jogviszonyt, hanem ha lehet, kapcsolódjon a szerződéshez. Táppénzes papír önmagában ne hozzon létre külön munkahelyet, hanem a megfelelő jogviszony sickPayDays/evidence adatait egészítse ki. Ne találj ki hiányzó adatot.";
+    }
+
+    public static EmploymentExtraction extractEmploymentData(Context context, Uri uri, String apiKey, String model) throws Exception {
+        String mime = context.getContentResolver().getType(uri);
+        if (mime == null) mime = "application/octet-stream";
+        String prompt = structuredPrompt();
+        String text;
+        if (mime.startsWith("image/")) {
+            text = createResponseForImage(context, uri, mime, apiKey, model, prompt);
+        } else {
+            String fileName = getFileName(context.getContentResolver(), uri);
+            String fileId = uploadFile(context, uri, fileName, mime, apiKey);
+            text = createResponseForFile(fileId, apiKey, model, prompt);
+        }
+        return parseEmploymentExtraction(text);
+    }
+
+    private static String structuredPrompt() {
+        return "Elemezd a csatolt magyar dokumentumot CSED/GYED jogosultsági 
