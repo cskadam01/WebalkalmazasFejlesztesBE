@@ -30,6 +30,7 @@ jobs:
           base64 -d baba-v16/v16patch.gz.b64 | gunzip > /tmp/v16.patch
           cd baba-v16-build-dir
           patch -p1 < /tmp/v16.patch
+          cp ../baba-v16/TestCalculator.java engine-test/TestCalculator.java
           grep -q "versionCode 7" app/build.gradle
           grep -q "versionName '1.6.0'" app/build.gradle
           grep -q "NEM CSED-maximum" app/src/main/java/hu/babatamogatas/app/CalculatorEngine.java
