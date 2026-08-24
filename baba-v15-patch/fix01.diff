@@ -1,0 +1,26 @@
+diff -ruN BabaV15_before_fix/app/build.gradle BabaV15/app/build.gradle
+--- BabaV15_before_fix/app/build.gradle
++++ BabaV15/app/build.gradle
+@@ -8,7 +8,7 @@
+         applicationId 'hu.babatamogatas.app'
+         minSdk 23
+         targetSdk 35
+-        versionCode 5
++        versionCode 6
+         versionName '1.5.0'
+     }
+ 
+     buildTypes {
+diff -ruN BabaV15_before_fix/app/src/main/java/hu/babatamogatas/app/MainActivity.java BabaV15/app/src/main/java/hu/babatamogatas/app/MainActivity.java
+--- BabaV15_before_fix/app/src/main/java/hu/babatamogatas/app/MainActivity.java
++++ BabaV15/app/src/main/java/hu/babatamogatas/app/MainActivity.java
+@@ -280,7 +280,8 @@
+             userNotes=guided+(userNotes.isEmpty()?"":" Felhasználói megjegyzés: "+userNotes);
+         }
+         List<Uri> selected=new ArrayList<>(state.uris);
+-        new Thread(() -> { try { OpenAIClient.BatchExtraction result=OpenAIClient.extractEmploymentBatch(this,selected,userNotes,key,SecureStore.getModel(this)); runOnUiThread(() -> { p.dismiss(); if(activeBatchImport!=state)return; if(result.jobs.isEmpty()){showHelp("Nincs létrehozható jogviszony","Az AI nem talált kellően alátámasztott munkaviszonyt vagy más biztosítási jogviszonyt a csomagban. Ellenőrizd a fájlokat és próbáld újra.");return;} jobs.clear(); for(OpenAIClient.EmploymentExtraction e:result.jobs){ try { String rel=e.relationType.isEmpty()?"Egyéb":e.relationType; LocalDate st=LocalDate.parse(!e.start.isEmpty()?e.start:e.evidenceStart); LocalDate en=(e.ongoing||e.end.isEmpty())?null:LocalDate.parse(e.end); boolean insured="igen".equals(e.insuredStatus)||e.insuranceEvidence||"Tartós megbízás".equals(rel); if("Normál megbízás".equals(rel)&&!e.insuranceEvidence&&e.monthlyGross>0) insured=CalculatorEngine.normalMandateLikelyInsured(st,e.monthlyGross); List<String> ev=new ArrayList<>(); ev.add("AI teljes import"+(e.notes.isEmpty()?"":" • "+e.notes)); jobs.add(new EmploymentPeriod(e.employer.isEmpty()?"Azonosítatlan jogviszony":e.employer,rel,st,en,e.monthlyGross,insured,Math.max(0,e.unpaidDays),Math.max(0,e.sickPayDays),ev)); } catch(Exception ignored){} } renderJobs(); state.dialog.dismiss(); String msg="Az AI "+jobs.size()+" kalkulációs időszakot/jogviszonyt állított össze a "+selected.size()+" dokumentumból."+(result.coverageSummary().isEmpty()?"":"\n\nAdatcsomag-ellenőrzés:\n"+result.coverageSummary())+(result.notes.isEmpty()?"":"\n\n"+result.notes); showHelp(state.eligibilityPackage?"Jogosultsági adatcsomag feldolgozva":"AI teljes import kész",msg+"\n\nA lista a NAV havi járulékalap-változásai miatt ugyanazon munkáltatót több időszakra bonthatja. Minden sort a Szerkesztés gombbal ellenőrizhetsz és módosíthatsz."); }); } catch(Exception e){ runOnUiThread(() -> { p.dismiss(); showHelp("AI-import hiba",e.getMessage()==null?"Ismeretlen hiba":e.getMessage()); }); } }).start();
++        final String analysisNotes=userNotes;
++        new Thread(() -> { try { OpenAIClient.BatchExtraction result=OpenAIClient.extractEmploymentBatch(this,selected,analysisNotes,key,SecureStore.getModel(this)); runOnUiThread(() -> { p.dismiss(); if(activeBatchImport!=state)return; if(result.jobs.isEmpty()){showHelp("Nincs létrehozható jogviszony","Az AI nem talált kellően alátámasztott munkaviszonyt vagy más biztosítási jogviszonyt a csomagban. Ellenőrizd a fájlokat és próbáld újra.");return;} jobs.clear(); for(OpenAIClient.EmploymentExtraction e:result.jobs){ try { String rel=e.relationType.isEmpty()?"Egyéb":e.relationType; LocalDate st=LocalDate.parse(!e.start.isEmpty()?e.start:e.evidenceStart); LocalDate en=(e.ongoing||e.end.isEmpty())?null:LocalDate.parse(e.end); boolean insured="igen".equals(e.insuredStatus)||e.insuranceEvidence||"Tartós megbízás".equals(rel); if("Normál megbízás".equals(rel)&&!e.insuranceEvidence&&e.monthlyGross>0) insured=CalculatorEngine.normalMandateLikelyInsured(st,e.monthlyGross); List<String> ev=new ArrayList<>(); ev.add("AI teljes import"+(e.notes.isEmpty()?"":" • "+e.notes)); jobs.add(new EmploymentPeriod(e.employer.isEmpty()?"Azonosítatlan jogviszony":e.employer,rel,st,en,e.monthlyGross,insured,Math.max(0,e.unpaidDays),Math.max(0,e.sickPayDays),ev)); } catch(Exception ignored){} } renderJobs(); state.dialog.dismiss(); String msg="Az AI "+jobs.size()+" kalkulációs időszakot/jogviszonyt állított össze a "+selected.size()+" dokumentumból."+(result.coverageSummary().isEmpty()?"":"\n\nAdatcsomag-ellenőrzés:\n"+result.coverageSummary())+(result.notes.isEmpty()?"":"\n\n"+result.notes); showHelp(state.eligibilityPackage?"Jogosultsági adatcsomag feldolgozva":"AI teljes import kész",msg+"\n\nA lista a NAV havi járulékalap-változásai miatt ugyanazon munkáltatót több időszakra bonthatja. Minden sort a Szerkesztés gombbal ellenőrizhetsz és módosíthatsz."); }); } catch(Exception e){ runOnUiThread(() -> { p.dismiss(); showHelp("AI-import hiba",e.getMessage()==null?"Ismeretlen hiba":e.getMessage()); }); } }).start();
+     }
+ 
+     private void showJobDialog(int editIndex) {
