@@ -1,8 +1,6 @@
-name: Build BabaEllatas v1.8 APK
+name: Build BabaEllatas v1.9 APK
 
 on:
-  push:
-    branches: [baba-v18-build]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -14,24 +12,35 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Reconstruct and repair v1.8 source ZIP
+      - name: Reconstruct v1.8 base source
         shell: bash
         run: |
           cat baba-v18-final-b64/part00 baba-v18-final-b64/part01 baba-v18-final-b64/part02 baba-v18-final-b64/part03 baba-v18-final-b64/part04 baba-v18-final-b64/part05 baba-v18-final-b64/part06 baba-v18-final-b64/part07 > /tmp/baba-v18.b64
-          base64 -d /tmp/baba-v18.b64 > /tmp/BabaEllatas-v1.8-source.partial.zip
-          if unzip -t /tmp/BabaEllatas-v1.8-source.partial.zip; then
-            cp /tmp/BabaEllatas-v1.8-source.partial.zip /tmp/BabaEllatas-v1.8-source.zip
+          base64 -d /tmp/baba-v18.b64 > /tmp/BabaEllatas-v18.partial.zip
+          if unzip -t /tmp/BabaEllatas-v18.partial.zip; then
+            cp /tmp/BabaEllatas-v18.partial.zip /tmp/BabaEllatas-v18.zip
           else
-            printf 'y\n' | zip -FF /tmp/BabaEllatas-v1.8-source.partial.zip --out /tmp/BabaEllatas-v1.8-source.zip
-            unzip -t /tmp/BabaEllatas-v1.8-source.zip
+            printf 'y\n' | zip -FF /tmp/BabaEllatas-v18.partial.zip --out /tmp/BabaEllatas-v18.zip
+            unzip -t /tmp/BabaEllatas-v18.zip
           fi
-          rm -rf /tmp/baba-v18-src
-          mkdir -p /tmp/baba-v18-src
-          unzip -q /tmp/BabaEllatas-v1.8-source.zip -d /tmp/baba-v18-src
-          test -f /tmp/baba-v18-src/app/build.gradle
-          test -f /tmp/baba-v18-src/app/src/main/java/hu/babatamogatas/app/CalculatorEngine.java
-          test -f /tmp/baba-v18-src/engine-test/TestCalculatorV18.java
-          grep -q "versionName '1.8.0'" /tmp/baba-v18-src/app/build.gradle
+          rm -rf /tmp/baba-v19-src
+          mkdir -p /tmp/baba-v19-src
+          unzip -q /tmp/BabaEllatas-v18.zip -d /tmp/baba-v19-src
+          test -f /tmp/baba-v19-src/app/src/main/java/hu/babatamogatas/app/CalculatorEngine.java
+
+      - name: Apply v1.9 entitlement and canonicalization fix
+        shell: bash
+        working-directory: /tmp/baba-v19-src
+        run: |
+          cat "$GITHUB_WORKSPACE"/baba-v19-patch/p00 "$GITHUB_WORKSPACE"/baba-v19-patch/p01 "$GITHUB_WORKSPACE"/baba-v19-patch/p02 "$GITHUB_WORKSPACE"/baba-v19-patch/p03 > /tmp/v19.patch.b64
+          base64 -d /tmp/v19.patch.b64 > /tmp/v19.patch
+          patch -p1 < /tmp/v19.patch
+          cat "$GITHUB_WORKSPACE"/baba-v19-patch/t00 "$GITHUB_WORKSPACE"/baba-v19-patch/t01 > /tmp/TestCalculatorV19.java.b64
+          base64 -d /tmp/TestCalculatorV19.java.b64 > engine-test/TestCalculatorV19.java
+          sed -i "s/versionCode 9/versionCode 10/; s/versionName '1.8.0'/versionName '1.9.0'/" app/build.gradle
+          grep -q "versionName '1.9.0'" app/build.gradle
+          grep -q "sameRealRelationship" app/src/main/java/hu/babatamogatas/app/CalculatorEngine.java
+          grep -q "entitlementStart" app/src/main/java/hu/babatamogatas/app/CalculatorEngine.java
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -44,33 +53,34 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Run calculator regression tests
-        working-directory: /tmp/baba-v18-src
+      - name: Run v1.8 and v1.9 calculation regression tests
+        working-directory: /tmp/baba-v19-src
         shell: bash
         run: |
-          rm -rf /tmp/baba-v18-tests && mkdir -p /tmp/baba-v18-tests
-          javac -d /tmp/baba-v18-tests app/src/main/java/hu/babatamogatas/app/EmploymentPeriod.java app/src/main/java/hu/babatamogatas/app/CalculationResult.java app/src/main/java/hu/babatamogatas/app/CalculatorEngine.java engine-test/TestCalculatorV18.java
-          java -cp /tmp/baba-v18-tests TestCalculatorV18
+          rm -rf /tmp/baba-v19-tests && mkdir -p /tmp/baba-v19-tests
+          javac -d /tmp/baba-v19-tests app/src/main/java/hu/babatamogatas/app/EmploymentPeriod.java app/src/main/java/hu/babatamogatas/app/CalculationResult.java app/src/main/java/hu/babatamogatas/app/CalculatorEngine.java engine-test/TestCalculatorV18.java engine-test/TestCalculatorV19.java
+          java -cp /tmp/baba-v19-tests TestCalculatorV18
+          java -cp /tmp/baba-v19-tests TestCalculatorV19
 
       - name: Build debug APK
-        working-directory: /tmp/baba-v18-src
+        working-directory: /tmp/baba-v19-src
         run: gradle assembleDebug --stacktrace
 
       - name: Verify APK
         shell: bash
         run: |
-          APK=$(find /tmp/baba-v18-src/app/build/outputs/apk/debug -name '*.apk' | head -1)
+          APK=$(find /tmp/baba-v19-src/app/build/outputs/apk/debug -name '*.apk' | head -1)
           test -n "$APK"
           file "$APK"
           unzip -t "$APK"
-          sha256sum "$APK" | tee /tmp/BabaEllatas-v1.8.sha256
-          cp "$APK" /tmp/BabaEllatas-2026-v1.8.apk
+          sha256sum "$APK" | tee /tmp/BabaEllatas-v1.9.sha256
+          cp "$APK" /tmp/BabaEllatas-2026-v1.9.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: BabaEllatas-2026-v1.8-APK
+          name: BabaEllatas-2026-v1.9-APK
           path: |
-            /tmp/BabaEllatas-2026-v1.8.apk
-            /tmp/BabaEllatas-v1.8.sha256
+            /tmp/BabaEllatas-2026-v1.9.apk
+            /tmp/BabaEllatas-v1.9.sha256
           if-no-files-found: error
