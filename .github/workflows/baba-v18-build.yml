@@ -1,0 +1,66 @@
+name: Build BabaEllatas v1.8 APK
+
+on:
+  push:
+    branches: [baba-v18-build]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconstruct v1.8 source ZIP
+        shell: bash
+        run: |
+          cat baba-v18-final-b64/part00 baba-v18-final-b64/part01 baba-v18-final-b64/part02 baba-v18-final-b64/part03 baba-v18-final-b64/part04 baba-v18-final-b64/part05 baba-v18-final-b64/part06 baba-v18-final-b64/part07 > /tmp/baba-v18.b64
+          base64 -d /tmp/baba-v18.b64 > /tmp/BabaEllatas-v1.8-source.zip
+          unzip -t /tmp/BabaEllatas-v1.8-source.zip
+          mkdir -p /tmp/baba-v18-src
+          unzip -q /tmp/BabaEllatas-v1.8-source.zip -d /tmp/baba-v18-src
+          test -f /tmp/baba-v18-src/app/build.gradle
+          grep -q "versionName '1.8.0'" /tmp/baba-v18-src/app/build.gradle
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Run calculator regression tests
+        working-directory: /tmp/baba-v18-src
+        shell: bash
+        run: |
+          mkdir -p /tmp/baba-v18-tests
+          javac -d /tmp/baba-v18-tests app/src/main/java/hu/babatamogatas/app/EmploymentPeriod.java app/src/main/java/hu/babatamogatas/app/CalculationResult.java app/src/main/java/hu/babatamogatas/app/CalculatorEngine.java engine-test/TestCalculatorV18.java
+          java -cp /tmp/baba-v18-tests TestCalculatorV18
+
+      - name: Build debug APK
+        working-directory: /tmp/baba-v18-src
+        run: gradle assembleDebug --stacktrace
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          APK=$(find /tmp/baba-v18-src/app/build/outputs/apk/debug -name '*.apk' | head -1)
+          test -n "$APK"
+          file "$APK"
+          unzip -t "$APK"
+          sha256sum "$APK" | tee /tmp/BabaEllatas-v1.8.sha256
+          cp "$APK" /tmp/BabaEllatas-2026-v1.8.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: BabaEllatas-2026-v1.8-APK
+          path: |
+            /tmp/BabaEllatas-2026-v1.8.apk
+            /tmp/BabaEllatas-v1.8.sha256
+          if-no-files-found: error
