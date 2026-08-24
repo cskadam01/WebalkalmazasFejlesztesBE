@@ -1,0 +1,28 @@
+ppend("\n").append(navContributionYears.isEmpty() ? "! NAV járulékadat-évek nem azonosíthatók" : "✓ NAV járulékadat-évek: " + navContributionYears);
++            b.append("\n").append(payslipMonths > 0 ? "✓ Bérlap/béradat: kb. " + payslipMonths + " havi adat" : "• Külön bérlap nem azonosítható (a NAV járulékalap ettől még használható)");
++            b.append("\n").append(sickPayDocuments ? "✓ Táppénzes/keresőképtelenségi irat felismerve" : "• Táppénzes irat nem azonosítható");
++            b.append("\n").append(contractDocuments ? "✓ Szerződés vagy módosítás felismerve" : "• Szerződés nem azonosítható");
++            if (!coverageNotes.isEmpty()) b.append("\n").append(coverageNotes);
++            return b.toString();
++        }
+     }
+ 
+     public static BatchExtraction extractEmploymentBatch(Context context, List<Uri> uris, String userNotes, String apiKey, String model) throws Exception {
+@@ -61,12 +78,18 @@
+     }
+ 
+     private static String batchPrompt(String userNotes, int fileCount) {
+-        return "Elemezd EGYÜTT ezt a teljes magyar CSED/GYED dokumentumcsomagot ("+fileCount+" fájl). A fájlok között lehet több munkaszerződés, megbízási/tartós megbízási szerződés, munkaköri leírás, módosítás, bér- vagy jövedelemigazolás, TB/járulék/adó kimutatás, egyéni vállalkozói irat és több táppénzes/keresőképtelenségi igazolás vagy ezek képe. " +
+-                "A cél nem fájlonkénti külön válasz, hanem a személy TELJES, összevont jogviszonylistája. Kapcsold össze az ugyanahhoz a munkáltatóhoz/jogviszonyhoz tartozó dokumentumokat, vond össze az átfedő bizonyítékokat és a táppénzes papírokat a megfelelő jogviszonyhoz rendeld. Ne duplikáld ugyanazt a jogviszonyt csak azért, mert több irat tartozik hozzá. " +
++        int y = java.time.LocalDate.now().getYear();
++        return "Elemezd EGYÜTT ezt a teljes magyar CSED/GYED jogosultsági dokumentumcsomagot ("+fileCount+" fájl). " +
++                "Kiemelten ismerd fel a két hivatalos mintatípust: (1) NEAK 'BIZTOSÍTÁSI JOGVISZONY' PDF, amely Nyilvántartási szám / Bejelentő név / FEOR / Jogosultság kezdete / Jogosultság vége mezőket tartalmaz; (2) NAV 'Magánszemélyek munkáltató által bevallott járulékadatainak lekérdezése' éves PDF, amely Foglalkoztató neve, Adószám, Bevallási időszak, Alkalmazás minősége, biztosítási/foglalkoztatási időszak, FEOR, napi/heti munkaidő, összevont adóalapba tartozó jövedelem, bérnek minősülő összeg, társadalombiztosítási járulék alapja és járulék összege adatokat tartalmaz. " +
++                "A dokumentumcsomagban lehet munkaszerződés, megbízási/tartós megbízási szerződés, munkaköri leírás, módosítás, bérlap, jövedelemigazolás, táppénzes/keresőképtelenségi igazolás vagy kép is. " +
+                 "A felhasználó kiegészítő információja: " + (userNotes==null||userNotes.trim().isEmpty()?"nincs":userNotes.trim()) + ". " +
+-                "KIZÁRÓLAG JSON objektumot adj markdown nélkül: {\"jobs\":[...],\"notes\":\"...\"}. A jobs minden eleme ugyanazokat a kulcsokat tartalmazza, mint az egyedi elemzés: documentType, relationType, employer, start, end, ongoing, evidenceStart, evidenceEnd, monthlyGross, sickPayDays, unpaidDays, insuredStatus, insuranceEvidence, notes. " +
+-                "relationType: Munkaviszony, Normál megbízás, Tartós megbízás, Egyéni vállalkozó vagy Egyéb. Dátumok YYYY-MM-DD. A sickPayDays legyen az adott jogviszonyhoz a dokumentumcsomagból megbízhatóan összesíthető táppénzes/keresőképtelen napok száma, ha nincs adat -1. " +
+-                "Nagyon fontos: járulék- vagy adópapír végösszegét NE kezeld havi bérként; pozitív TB-járulék biztosítási bizonyíték lehet csak az igazolt időszakra. Normál megbízásból ne következtess automatikusan biztosítottságra. A munkaköri leírás önmagában ne hozzon létre új jogviszonyt, hanem ha lehet, kapcsolódjon a szerződéshez. Táppénzes papír önmagában ne hozzon létre külön munkahelyet, hanem a megfelelő jogviszony sickPayDays/evidence adatait egészítse ki. Ne találj ki hiányzó adatot.";
++                "FORRÁS-PRIORITÁS: a NEAK jogviszonylista legyen elsődleges bizonyíték arra, hogy mely biztosítási/jogosultsági időszakok léteznek és meddig állnak fenn. A NAV éves kivonatok legyenek elsődlegesek a havi jövedelem/járulékalap, alkalmazás minősége és munkaidő megállapításához. Szerződés és bérlap egészítse ki vagy pontosítsa ezeket, de ne írjon felül frissebb hivatalos adatot indoklás nélkül. " +
++                "A NAV-ban különböztesd meg legalább: munkaviszony; munkavégzésre irányuló egyéb jogviszony; társas vállalkozó (munkaviszony mellett); normál/tartós megbízás; egyéni vállalkozó; egyéb. A 'munkavégzésre irányuló egyéb jogviszony' ne váljon automatikusan munkaviszonnyá. A 'társas vállalkozó (munkaviszony mellett)' 0 Ft TB-alappal se legyen automatikusan nem biztosított, ha a NEAK vagy más hivatalos adat ugyanarra az időre biztosítási jogviszonyt igazol. " +
++                "LISTA-KÉPZÉS: ne fájlonként adj sort. Azonos munkáltató + azonos jogviszony + azonos havi járulékalap/bér + folytonos időszak esetén vond össze a hónapokat. Ha ugyanannál a munkáltatónál a havi TB-járulékalap/bér, jogviszonytípus vagy biztosítotti státusz változik, készíts ÚJ időszaksort, hogy a 180/120 napi ellátási alap számítható legyen. Párhuzamos munkáltatókat külön tarts meg. NEAK-ból származó folyamatos időszakot ne vágj szét pusztán azért, mert a NAV PDF havi oldalakon ismétli; csak a jövedelmi szakaszokat bontsd. " +
++                "Táppénzes papírt a megfelelő jogviszonyhoz rendelj; a táppénz összege ne legyen munkabér, és a keresőképtelenséget ne kezeld automatik
