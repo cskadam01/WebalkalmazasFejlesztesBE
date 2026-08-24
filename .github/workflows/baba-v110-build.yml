@@ -1,0 +1,74 @@
+name: Build BabaEllatas v1.10 APK
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct and verify source
+        shell: bash
+        run: |
+          cat baba-v110-bin/chunk00 baba-v110-bin/chunk01 baba-v110-bin/chunk02 baba-v110-bin/chunk03 baba-v110-bin/chunk04 baba-v110-bin/chunk05 > /tmp/BabaEllatas_2026_v1.10_Source.zip
+          echo "c7f09be607017f89783d9545bffb49a59b2b1222997fc2f09803dcb6c0bd6840  /tmp/BabaEllatas_2026_v1.10_Source.zip" | sha256sum -c -
+          unzip -t /tmp/BabaEllatas_2026_v1.10_Source.zip
+          rm -rf /tmp/baba-v110-src
+          mkdir -p /tmp/baba-v110-src
+          unzip -q /tmp/BabaEllatas_2026_v1.10_Source.zip -d /tmp/baba-v110-src
+          grep -q "versionName '1.10.0'" /tmp/baba-v110-src/app/build.gradle
+          test -f /tmp/baba-v110-src/app/src/main/java/hu/babatamogatas/app/EmploymentImportNormalizer.java
+          grep -q "auditPrompt" /tmp/baba-v110-src/app/src/main/java/hu/babatamogatas/app/OpenAIClient.java
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Run calculation and import regression tests
+        working-directory: /tmp/baba-v110-src
+        shell: bash
+        run: |
+          rm -rf /tmp/baba-v110-tests
+          mkdir -p /tmp/baba-v110-tests
+          javac -d /tmp/baba-v110-tests \
+            app/src/main/java/hu/babatamogatas/app/EmploymentPeriod.java \
+            app/src/main/java/hu/babatamogatas/app/CalculationResult.java \
+            app/src/main/java/hu/babatamogatas/app/CalculatorEngine.java \
+            app/src/main/java/hu/babatamogatas/app/EmploymentImportNormalizer.java \
+            engine-test/TestCalculatorV18.java \
+            engine-test/TestCalculatorV19.java \
+            engine-test/TestImportNormalizer.java
+          java -cp /tmp/baba-v110-tests TestCalculatorV18
+          java -cp /tmp/baba-v110-tests TestCalculatorV19
+          java -cp /tmp/baba-v110-tests TestImportNormalizer
+
+      - name: Build APK
+        working-directory: /tmp/baba-v110-src
+        run: gradle assembleDebug --stacktrace
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          APK=$(find /tmp/baba-v110-src/app/build/outputs/apk/debug -name '*.apk' | head -1)
+          test -n "$APK"
+          file "$APK"
+          unzip -t "$APK"
+          sha256sum "$APK" | tee /tmp/BabaEllatas-v1.10.sha256
+          cp "$APK" /tmp/BabaEllatas-2026-v1.10.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BabaEllatas-2026-v1.10-APK
+          path: |
+            /tmp/BabaEllatas-2026-v1.10.apk
+            /tmp/BabaEllatas-v1.10.sha256
+          if-no-files-found: error
