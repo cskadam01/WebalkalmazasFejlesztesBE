@@ -14,7 +14,7 @@ jobs:
       - name: Reconstruct and verify source
         shell: bash
         run: |
-          cat baba-v110-bin/chunk00 baba-v110-bin/chunk01 baba-v110-bin/chunk02 baba-v110-bin/chunk03 baba-v110-bin/chunk04 baba-v110-bin/chunk05 > /tmp/BabaEllatas_2026_v1.10_Source.zip
+          cat baba-v110-bin/c00_0 baba-v110-bin/c00_1 baba-v110-bin/chunk01 baba-v110-bin/chunk02 baba-v110-bin/chunk03 baba-v110-bin/chunk04 baba-v110-bin/chunk05 > /tmp/BabaEllatas_2026_v1.10_Source.zip
           echo "c7f09be607017f89783d9545bffb49a59b2b1222997fc2f09803dcb6c0bd6840  /tmp/BabaEllatas_2026_v1.10_Source.zip" | sha256sum -c -
           unzip -t /tmp/BabaEllatas_2026_v1.10_Source.zip
           rm -rf /tmp/baba-v110-src
