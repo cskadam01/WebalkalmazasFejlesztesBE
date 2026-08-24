@@ -1,0 +1,32 @@
+us biztosítás-megszakításként. A sickPayDays csak megbízhatóan igazolt nap legyen. A járulék/adó végösszege soha ne legyen havi bér. Havi jövedelemnél elsőként a 'társadalombiztosítási járulék alapja' illetve munkaviszonynál a 'bérnek minősülő összeg' használható, de ha eltérnek, notes-ban jelezd az eltérést. " +
++                "A cél a kalkulációhoz használható teljes lista, különösen a szülést megelőző 2 év 365 biztosított napjának és az ellátási alap 180/120 jövedelmi napjainak vizsgálatához. Az elvárt NAV évek jelenleg: "+(y-2)+", "+(y-1)+", "+y+". " +
++                "KIZÁRÓLAG JSON objektumot adj markdown nélkül ebben a formában: {\"jobs\":[...],\"coverage\":{\"neakInsuranceList\":true/false,\"navContributionYears\":[év,...],\"payslipMonths\":0,\"sickPayDocuments\":true/false,\"contractDocuments\":true/false,\"coverageNotes\":\"rövid hiánylista/észrevétel\"},\"notes\":\"összegző megjegyzés\"}. " +
++                "A jobs minden eleme: documentType, relationType, employer, start, end, ongoing, evidenceStart, evidenceEnd, monthlyGross, sickPayDays, unpaidDays, insuredStatus, insuranceEvidence, notes. relationType egyik: Munkaviszony, Normál megbízás, Tartós megbízás, Egyéni vállalkozó, Társas vállalkozó, Munkavégzésre irányuló egyéb jogviszony, Egyéb. Dátum YYYY-MM-DD. Ne találj ki hiányzó adatot.";
+     }
+ 
+     public static EmploymentExtraction extractEmploymentData(Context context, Uri uri, String apiKey, String model) throws Exception {
+@@ -166,8 +189,12 @@
+ 
+     private static BatchExtraction parseBatchExtraction(String raw) throws Exception {
+         String t=raw==null?"":raw.trim(); if(t.startsWith("```")){int f=t.indexOf('\n');if(f>=0)t=t.substring(f+1);int e=t.lastIndexOf("```");if(e>=0)t=t.substring(0,e);t=t.trim();}
+-        int a=t.indexOf('{'),b=t.lastIndexOf('}'); if(a>=0&&b>a)t=t.substring(a,b+1); JSONObject root=new JSONObject(t); BatchExtraction out=new BatchExtraction(); out.notes=root.optString("notes","").trim(); JSONArray arr=root.optJSONArray("jobs");
++        int a=t.indexOf('{'),b=t.lastIndexOf('}'); if(a>=0&&b>a)t=t.substring(a,b+1); JSONObject root=new JSONObject(t); BatchExtraction out=new BatchExtraction(); out.notes=root.optString("notes","").trim();
++        JSONObject cov=root.optJSONObject("coverage");
++        if(cov!=null){out.neakInsuranceList=cov.optBoolean("neakInsuranceList",false);out.payslipMonths=cov.optInt("payslipMonths",0);out.sickPayDocuments=cov.optBoolean("sickPayDocuments",false);out.contractDocuments=cov.optBoolean("contractDocuments",false);out.coverageNotes=cov.optString("coverageNotes","").trim();JSONArray yrs=cov.optJSONArray("navContributionYears");if(yrs!=null)for(int i=0;i<yrs.length();i++){int yy=yrs.optInt(i,0);if(yy>0&&!out.navContributionYears.contains(yy))out.navContributionYears.add(yy);}}
++        JSONArray arr=root.optJSONArray("jobs");
+         if(arr!=null) for(int i=0;i<arr.length();i++){JSONObject j=arr.optJSONObject(i);if(j==null)continue;EmploymentExtraction e=new EmploymentExtraction();e.documentType=j.optString("documentType","").trim();e.relationType=j.optString("relationType","").trim();e.employer=j.optString("employer","").trim();e.start=j.optString("start","").trim();e.end=j.optString("end","").trim();e.evidenceStart=j.optString("evidenceStart","").trim();e.evidenceEnd=j.optString("evidenceEnd","").trim();e.ongoing=j.optBoolean("ongoing",false);e.monthlyGross=j.optLong("monthlyGross",0);e.sickPayDays=j.has("sickPayDays")?j.optInt("sickPayDays",-1):-1;e.unpaidDays=j.has("unpaidDays")?j.optInt("unpaidDays",-1):-1;e.insuredStatus=j.optString("insuredStatus","bizonytalan").trim().toLowerCase();e.insuranceEvidence=j.optBoolean("insuranceEvidence",false);e.notes=j.optString("notes","").trim();out.jobs.add(e);}
++        java.util.Collections.sort(out.navContributionYears);
+         return out;
+     }
+ 
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -9,7 +9,7 @@
+         minSdk 23
+         targetSdk 35
+         versionCode 5
+-        versionName '1.4.0'
++        versionName '1.5.0'
+     }
+ 
+     buildTypes {
