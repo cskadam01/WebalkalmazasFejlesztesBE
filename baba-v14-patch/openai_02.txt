@@ -1,0 +1,34 @@
+uthorization", "Bearer " + apiKey); c.setRequestProperty("Content-Type", "application/json");
+        JSONObject req = new JSONObject(); req.put("model", model == null || model.trim().isEmpty() ? "gpt-5.4-mini" : model.trim());
+        JSONArray input = new JSONArray(); JSONObject msg = new JSONObject(); msg.put("role","user"); msg.put("content",content); input.put(msg); req.put("input",input); req.put("store",false);
+        byte[] payload=req.toString().getBytes(StandardCharsets.UTF_8); c.setFixedLengthStreamingMode(payload.length);
+        try(OutputStream out=c.getOutputStream()){out.write(payload);} String body=readResponse(c);
+        if(c.getResponseCode()/100!=2) throw new IOException("OpenAI elemzési hiba: "+compactError(body));
+        JSONObject root=new JSONObject(body); String direct=root.optString("output_text",""); if(!direct.isEmpty()) return direct;
+        JSONArray output=root.optJSONArray("output"); StringBuilder sb=new StringBuilder();
+        if(output!=null) for(int i=0;i<output.length();i++){JSONObject item=output.optJSONObject(i);if(item==null)continue;JSONArray arr=item.optJSONArray("content");if(arr==null)continue;for(int j=0;j<arr.length();j++){JSONObject part=arr.optJSONObject(j);if(part!=null){String t=part.optString("text","");if(!t.isEmpty())sb.append(t);}}}
+        if(sb.length()==0) throw new IOException("Az AI nem adott vissza feldolgozható választ."); return sb.toString().trim();
+    }
+
+    private static EmploymentExtraction parseEmploymentExtraction(String raw) throws Exception {
+        String t=raw==null?"":raw.trim(); if(t.startsWith("```")){int f=t.indexOf('\n');if(f>=0)t=t.substring(f+1);int e=t.lastIndexOf("```");if(e>=0)t=t.substring(0,e);t=t.trim();}
+        int a=t.indexOf('{'),b=t.lastIndexOf('}');if(a>=0&&b>a)t=t.substring(a,b+1); JSONObject j=new JSONObject(t); EmploymentExtraction e=new EmploymentExtraction();
+        e.documentType=j.optString("documentType","").trim(); e.relationType=j.optString("relationType","").trim(); e.employer=j.optString("employer","").trim();
+        e.start=j.optString("start","").trim();e.end=j.optString("end","").trim();e.evidenceStart=j.optString("evidenceStart","").trim();e.evidenceEnd=j.optString("evidenceEnd","").trim();e.ongoing=j.optBoolean("ongoing",false);
+        e.monthlyGross=j.optLong("monthlyGross",0); e.sickPayDays=j.has("sickPayDays")?j.optInt("sickPayDays",-1):-1; e.unpaidDays=j.has("unpaidDays")?j.optInt("unpaidDays",-1):-1;
+        e.insuredStatus=j.optString("insuredStatus","bizonytalan").trim().toLowerCase(); e.insuranceEvidence=j.optBoolean("insuranceEvidence",false); e.notes=j.optString("notes","").trim(); return e;
+    }
+
+    private static BatchExtraction parseBatchExtraction(String raw) throws Exception {
+        String t=raw==null?"":raw.trim(); if(t.startsWith("```")){int f=t.indexOf('\n');if(f>=0)t=t.substring(f+1);int e=t.lastIndexOf("```");if(e>=0)t=t.substring(0,e);t=t.trim();}
+        int a=t.indexOf('{'),b=t.lastIndexOf('}'); if(a>=0&&b>a)t=t.substring(a,b+1); JSONObject root=new JSONObject(t); BatchExtraction out=new BatchExtraction(); out.notes=root.optString("notes","").trim(); JSONArray arr=root.optJSONArray("jobs");
+        if(arr!=null) for(int i=0;i<arr.length();i++){JSONObject j=arr.optJSONObject(i);if(j==null)continue;EmploymentExtraction e=new EmploymentExtraction();e.documentType=j.optString("documentType","").trim();e.relationType=j.optString("relationType","").trim();e.employer=j.optString("employer","").trim();e.start=j.optString("start","").trim();e.end=j.optString("end","").trim();e.evidenceStart=j.optString("evidenceStart","").trim();e.evidenceEnd=j.optString("evidenceEnd","").trim();e.ongoing=j.optBoolean("ongoing",false);e.monthlyGross=j.optLong("monthlyGross",0);e.sickPayDays=j.has("sickPayDays")?j.optInt("sickPayDays",-1):-1;e.unpaidDays=j.has("unpaidDays")?j.optInt("unpaidDays",-1):-1;e.insuredStatus=j.optString("insuredStatus","bizonytalan").trim().toLowerCase();e.insuranceEvidence=j.optBoolean("insuranceEvidence",false);e.notes=j.optString("notes","").trim();out.jobs.add(e);}
+        return out;
+    }
+
+    private static String readResponse(HttpURLConnection c) throws IOException {InputStream in=c.getResponseCode()/100==2?c.getInputStream():c.getErrorStream();if(in==null)return "";ByteArrayOutputStream b=new ByteArrayOutputStream();byte[] buf=new byte[4096];int n;while((n=in.read(buf))!=-1)b.write(buf,0,n);return b.toString("UTF-8");}
+    private static void write(OutputStream o,String s)throws IOException{o.write(s.getBytes(StandardCharsets.UTF_8));}
+    private static String safe(String s){return s==null?"document":s.replace("\"","").replace("\r","").replace("\n","");}
+    private static String compactError(String body){try{JSONObject e=new JSONObject(body).optJSONObject("error");return e==null?body:e.optString("message",body);}catch(Exception x){return body.length()>300?body.substring(0,300):body;}}
+    private static String getFileName(ContentResolver r,Uri u){String name="document";try(Cursor c=r.query(u,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())name=c.getString(0);}catch(Exception ignored){}return name;}
+}
