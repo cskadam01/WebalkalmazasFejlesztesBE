@@ -1,0 +1,164 @@
+diff -ruN v111base/app/build.gradle v112src/app/build.gradle
+--- v111base/app/build.gradle	2026-08-25 05:18:03.000000000 +0000
++++ v112src/app/build.gradle	2026-08-25 06:47:09.514601808 +0000
+@@ -8,8 +8,8 @@
+         applicationId 'hu.babatamogatas.app'
+         minSdk 23
+         targetSdk 35
+-        versionCode 12
+-        versionName '1.11.0'
++        versionCode 13
++        versionName '1.12.0'
+     }
+ 
+     buildTypes {
+diff -ruN v111base/app/src/main/java/hu/babatamogatas/app/EligibilityImportProcessor.java v112src/app/src/main/java/hu/babatamogatas/app/EligibilityImportProcessor.java
+--- v111base/app/src/main/java/hu/babatamogatas/app/EligibilityImportProcessor.java	1970-01-01 00:00:00.000000000 +0000
++++ v112src/app/src/main/java/hu/babatamogatas/app/EligibilityImportProcessor.java	2026-08-25 06:47:09.513500171 +0000
+@@ -0,0 +1,38 @@
++package hu.babatamogatas.app;
++
++import java.time.LocalDate;
++import java.util.*;
++
++/**
++ * Deterministic import-window filter. It trims imported evidence to the selected
++ * CSED-start-based two-year window without asking the AI to decide relevance.
++ */
++public final class EligibilityImportProcessor {
++    private EligibilityImportProcessor() {}
++
++    public static List<EmploymentPeriod> filterToCsedImportWindow(List<EmploymentPeriod> input, LocalDate windowStart, LocalDate csedStart) {
++        List<EmploymentPeriod> out = new ArrayList<>();
++        if(input==null || windowStart==null || csedStart==null) return out;
++        for(EmploymentPeriod p: input){
++            if(p==null || p.start==null) continue;
++            LocalDate effectiveEnd = p.end==null ? csedStart : p.end;
++            if(effectiveEnd.isBefore(windowStart) || p.start.isAfter(csedStart)) continue;
++            LocalDate start = p.start.isBefore(windowStart) ? windowStart : p.start;
++            LocalDate end = p.end;
++            if(end!=null && end.isAfter(csedStart)) end=csedStart;
++            List<String> evidence = new ArrayList<>(p.documentEvidence);
++            if(p.start.isBefore(windowStart)) evidence.add("Importablakra szűrve • eredeti kezdet: "+p.start);
++            List<EmploymentPeriod.IncomeRecord> incomes = new ArrayList<>();
++            for(EmploymentPeriod.IncomeRecord r:p.incomeRecords){
++                if(r==null || r.start==null) continue;
++                LocalDate re=r.end==null?r.start:r.end;
++                if(re.isBefore(windowStart) || r.start.isAfter(csedStart)) continue;
++                LocalDate rs=r.start.isBefore(windowStart)?windowStart:r.start;
++                LocalDate rend=re.isAfter(csedStart)?csedStart:re;
++                incomes.add(new EmploymentPeriod.IncomeRecord(rs,rend,r.contributionIncome,r.incomeDays,r.official,r.source));
++            }
++            out.add(new EmploymentPeriod(p.relationshipId,p.employer,p.relationType,start,end,p.monthlyGross,p.insured,p.unpaidDays,p.sickPayDays,evidence,incomes));
++        }
++        return EmploymentImportNormalizer.normalize(out);
++    }
++}
+diff -ruN v111base/app/src/main/java/hu/babatamogatas/app/EmploymentImportNormalizer.java v112src/app/src/main/java/hu/babatamogatas/app/EmploymentImportNormalizer.java
+--- v111base/app/src/main/java/hu/babatamogatas/app/EmploymentImportNormalizer.java	2026-08-24 20:54:38.000000000 +0000
++++ v112src/app/src/main/java/hu/babatamogatas/app/EmploymentImportNormalizer.java	2026-08-25 06:47:40.959245849 +0000
+@@ -97,9 +97,15 @@
+         return !aend.isBefore(bs) && !bend.isBefore(as);
+     }
+ 
++    public static boolean sameEmployer(String a, String b) { return canonicalEmployer(a).equals(canonicalEmployer(b)); }
++
++    public static boolean sameRelationType(String a, String b) { return canonicalType(a).equals(canonicalType(b)); }
++
+     private static String canonicalEmployer(String x) {
+         String s = canonical(x);
+-        s = s.replaceAll("\\b(kft|korlatolt felelossegu tarsasag|zrt|zartkoruen mukodo reszvenytarsasag|nyrt|bt)\\b", " ")
++        s = s.replaceAll("\\b(kft|korlatolt felelossegu tarsasag|zrt|zartkoruen mukodo reszvenytarsasag|nyrt|bt|beteti tarsasag)\\b", " ")
++                .replace("onkormanyzata", "onkormanyzat")
++                .replace("polgarmesteri hivatalanak", "polgarmesteri hivatal")
+                 .replaceAll("\\s+", " ").trim();
+         return s;
+     }
+diff -ruN v111base/app/src/main/java/hu/babatamogatas/app/MainActivity.java v112src/app/src/main/java/hu/babatamogatas/app/MainActivity.java
+--- v111base/app/src/main/java/hu/babatamogatas/app/MainActivity.java	2026-08-25 05:18:14.000000000 +0000
++++ v112src/app/src/main/java/hu/babatamogatas/app/MainActivity.java	2026-08-25 06:46:43.783228636 +0000
+@@ -22,7 +22,7 @@
+     private CheckBox earlyCsed, workAfter90, contributionRelief;
+     private final List<EmploymentPeriod> jobs = new ArrayList<>();
+     private String lastShareText = "";
+-    private Button shareButton;
++    private Button shareButton, recalculateButton;
+     private JobDialogState activeJobDialog;
+     private static final int REQ_JOB_DOCUMENT = 88;
+     private static final int REQ_BATCH_DOCUMENTS = 89;
+@@ -33,7 +33,6 @@
+         AlertDialog dialog;
+         EditText notes, plannedWorkEnd;
+         TextView selectedInfo;
+-        boolean eligibilityPackage = false;
+         final List<Uri> uris = new ArrayList<>();
+     }
+ 
+@@ -133,9 +132,6 @@
+         actions.addView(add, new LinearLayout.LayoutParams(0, -2, 1));
+         actions.addView(aiImport, new LinearLayout.LayoutParams(0, -2, 1));
+         c.addView(actions);
+-        Button eligibilityPack = secondaryButton("📂 Jogosultsági adatcsomag");
+-        eligibilityPack.setOnClickListener(v -> showEligibilityPackageDialog());
+-        c.addView(eligibilityPack);
+         Button sample = secondaryButton("Minta"); sample.setOnClickListener(v -> loadSample()); c.addView(sample);
+         root.addView(c);
+     }
+@@ -145,6 +141,8 @@
+         c.addView(sectionHeader("3. Eredmény", "A kalkuláció becslés. A végleges jogosultságot és összeget a kifizetőhely vagy az illetékes hatóság állapítja meg.", "Eredmény súgó"));
+         Button calc = button("Kiszámítom a CSED-et és GYED-et"); calc.setOnClickListener(v -> calculate()); c.addView(calc);
+         resultBox = new LinearLayout(this); resultBox.setOrientation(LinearLayout.VERTICAL); c.addView(resultBox);
++        recalculateButton = button("↻ Újraszámítás a módosított adatokkal");
++        recalculateButton.setVisibility(View.GONE); recalculateButton.setOnClickListener(v -> calculate()); c.addView(recalculateButton);
+         shareButton = secondaryButton("↗ Eredmény megosztása");
+         shareButton.setVisibility(View.GONE); shareButton.setOnClickListener(v -> shareResult()); c.addView(shareButton);
+         root.addView(c);
+@@ -165,7 +163,7 @@
+     private void showGeneralHelp() {
+         showHelp("BabaEllátás súgó",
+                 "A főképernyőn csak a szükséges adatokat látod. A ? gombok részletes magyarázatot nyitnak meg.\n\n" +
+-                "1. Add meg a várható szülési dátumot.\n2. A Munkák és bérek résznél rögzítsd az elmúlt 2+ év jogviszonyait.\n3. Az „Új hozzáadása” gombbal egyetlen jogviszonyt rögzíthetsz vagy dokumentumból kitölthetsz.\n4. Az „AI teljes import” egyszerre több szerződést, táppénzes papírt, járulékigazolást és képet elemez, majd felépíti a teljes listát. Az elemzéshez saját szöveges információt is írhatsz.\n5. A mentett munkák a Szerkesztés gombbal módosíthatók.\n6. Futtasd a kalkulációt, majd az eredményt megoszthatod.\n\n" +
++                "1. Add meg a várható szülési dátumot.\n2. A Munkák és bérek résznél a CSED kezdőnapjához tartozó releváns időszak jogviszonyait rögzítheted.\n3. Az „Új hozzáadása” gombbal egyetlen jogviszonyt rögzíthetsz vagy dokumentumból kitölthetsz.\n4. Az „AI teljes import” az egyetlen teljes adatcsomag-funkció: NEAK/NAV linkek, több fájl, szerződések, bérlapok, táppénzes papírok, képek és saját megjegyzés egy helyen. A program csak a kiválasztott CSED-kezdettől visszaszámított 2 éves importablak releváns rekordjait tartja meg.\n5. A mentett munkák a Szerkesztés gombbal módosíthatók.\n6. Futtasd a kalkulációt. Ha utána bármit módosítasz, az Eredmény résznél az „Újraszámítás a módosított adatokkal” gombbal azonnal újraszámolhatod AI-hívás nélkül, majd megoszthatod az eredményt.\n\n" +
+                 "Az AI-feldolgozás a Beállításokban elmentett OpenAI API-kulcsot használja.");
+     }
+ 
+@@ -204,42 +202,6 @@
+     private void rebuildUi() { root.removeAllViews(); addTopBar(); addHero(); addBabyCard(); addJobsCard(); renderJobs(); addCalculateCard(); addFooter(); }
+ 
+ 
+-    private void showEligibilityPackageDialog() {
+-        int y = LocalDate.now().getYear();
+-        BatchImportState state = new BatchImportState(); state.eligibilityPackage = true;
+-        ScrollView scroll = new ScrollView(this);
+-        LinearLayout x = new LinearLayout(this); x.setOrientation(LinearLayout.VERTICAL); x.setPadding(dp(16),dp(6),dp(16),dp(12)); scroll.addView(x);
+-
+-        TextView intro = text("A pontosabb CSED/GYED elemzéshez töltsd fel együtt a hivatalos biztosítási és járulékadatokat. Az AI a NEAK-listát időszaki törzsadatként, a NAV-kivonatokat havi jövedelem- és járulékalapként használja, majd ezekhez kapcsolja a szerződéseket, bérlapokat és táppénzes iratokat.",12,false); intro.setTextColor(muted); x.addView(intro);
+-
+-        TextView need = text("Szükséges / javasolt adatcsomag:\n✓ NEAK biztosítási jogviszony lista\n✓ NAV járulékadat-kivonat: "+(y-2)+", "+(y-1)+" és "+y+"\n✓ Utolsó 8 havi bérlap\n✓ Munkaszerződés / megbízási szerződés és módosítások\n✓ Ha volt táppénz: kezdő/záró időszak és kifizetés/keresőképtelenség igazolása\n✓ Várható szülési dátum (a főképernyőn)\n✓ Ha még dolgozol: tervezett utolsó munkanap",12,true);
+-        need.setTextColor(ink); need.setPadding(0,dp(10),0,dp(8)); x.addView(need);
+-
+-        LinearLayout links = horizontal();
+-        Button neak = secondaryButton("NEAK megnyitása"); neak.setOnClickListener(v -> openExternalUrl("https://ugyfelkapu.neak.gov.hu/"));
+-        Button nav = secondaryButton("NAV megnyitása"); nav.setOnClickListener(v -> openExternalUrl("https://ugyfelportal.nav.gov.hu/"));
+-        links.addView(neak,new LinearLayout.LayoutParams(0,-2,1)); links.addView(nav,new LinearLayout.LayoutParams(0,-2,1)); x.addView(links);
+-        TextView sourceHint=text("NEAK: biztosítási jogviszonyok / jogosultsági időszakok.  NAV: Magánszemélyek munkáltató által bevallott járulékadatainak lekérdezése, évenként letöltve.",11,false); sourceHint.setTextColor(muted); x.addView(sourceHint);
+-
+-        Button choose=secondaryButton("📎 Teljes adatcsomag kiválasztása"); x.addView(choose);
+-        state.selectedInfo=text("Még nincs kiválasztott fájl.",11,false); state.selectedInfo.setTextColor(muted); x.addView(state.selectedInfo);
+-        x.addView(label("Ha még dolgozol, meddig tervezel dolgozni?"));
+-        state.plannedWorkEnd=input("ÉÉÉÉ-HH-NN vagy rövid szöveg"); x.addView(state.plannedWorkEnd);
+-        TextView notesLabel=label("Kiegészítő információ az AI-nak"); notesLabel.setPadding(0,dp(10),0,0); x.addView(notesLabel);
+-        state.notes=new EditText(this); state.notes.setHint("Pl. melyik táppénzes papír melyik munkahelyhez tartozik; melyik megbízás egyszeri; ismert bérváltozás stb."); state.notes.setMinLines(4); state.notes.setGravity(Gravity.TOP); state.notes.setTextColor(ink); state.notes.setHintTextColor(Color.rgb(155,140,146)); state.notes.setBackgroundResource(R.drawable.input_bg); state.notes.setPadding(dp(12),dp(10),dp(12),dp(10)); x.addView(state.notes,new LinearLayout.LayoutParams(-1,dp(120)));
+-
+-        AlertDialog dlg=new AlertDialog.Builder(this).setTitle("Jogosultsági dokumentumok / teljes adatcsomag").setView(scroll).setPositiveButton("AI elemzés és lista létrehozása",null).setNegativeButton("Mégse",null).create();
+-        state.dialog=dlg; activeBatchImport=state;
+-        choose.setOnClickListener(v -> { Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT); i.setType("*/*"); i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true); i.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/pdf","image/jpeg","image/png","image/webp","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","text/plain"}); i.addCategory(Intent.CATEGORY_OPENABLE); startActivityForResult(i,REQ_BATCH_DOCUMENTS); });
+-        dlg.setOnDismissListener(d -> { if(activeBatchImport==state) activeBatchImport=null; });
+-        dlg.setOnShowListener(v -> dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(w -> {
+-            if(SecureStore.getApiKey(this).isEmpty()){ showSettings(); return; }
+-            if(state.uris.isEmpty()){toast("Válaszd ki legalább a NEAK/NAV dokumentumokat.");return;}
+-            analyzeBatchImport(state);
+-        }));
+-        dlg.show();
+-    }
+-
