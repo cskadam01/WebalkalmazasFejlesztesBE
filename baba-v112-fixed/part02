@@ -1,0 +1,73 @@
+   state.notes = new EditText(this); state.notes.setHint("Pl. a Gyömrői szerződés 2026.02.10-től fennálló munkaviszony; melyik táppénzes papír melyik munkahelyhez tartozik; melyik megbízás egyszeri stb."); state.notes.setMinLines(4); state.notes.setGravity(Gravity.TOP); state.notes.setTextColor(ink); state.notes.setHintTextColor(Color.rgb(155,140,146)); state.notes.setBackgroundResource(R.drawable.input_bg); state.notes.setPadding(dp(12),dp(10),dp(12),dp(10)); x.addView(state.notes,new LinearLayout.LayoutParams(-1,dp(120)));
++        AlertDialog dlg = new AlertDialog.Builder(this).setTitle("AI teljes import").setView(scroll).setPositiveButton("Elemzés és lista összeállítása",null).setNegativeButton("Mégse",null).create();
+         state.dialog=dlg; activeBatchImport=state;
+         choose.setOnClickListener(v -> { Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT); i.setType("*/*"); i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true); i.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/pdf","image/jpeg","image/png","image/webp","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","text/plain"}); i.addCategory(Intent.CATEGORY_OPENABLE); startActivityForResult(i,REQ_BATCH_DOCUMENTS); });
+         dlg.setOnDismissListener(d -> { if(activeBatchImport==state) activeBatchImport=null; });
+@@ -275,42 +254,88 @@
+         String key=SecureStore.getApiKey(this); if(key.isEmpty()){showSettings();return;}
+         ProgressDialog p=new ProgressDialog(this); p.setTitle("Teljes dokumentumcsomag elemzése"); p.setMessage("Fájlok dokumentumonkénti, szigorú sémás feldolgozása és determinisztikus összevonása…"); p.setIndeterminate(true); p.setCancelable(false); p.show();
+         String userNotes=state.notes.getText().toString().trim();
+-        if(state.eligibilityPackage){
+-            int y=LocalDate.now().getYear();
+-            String work=state.plannedWorkEnd==null?"":state.plannedWorkEnd.getText().toString().trim();
+-            String guided="VEZETETT JOGOSULTSÁGI ADATCSOMAG. Elvárt NAV évek: "+(y-2)+", "+(y-1)+", "+y+". A NEAK biztosítási jogviszony listát elsődleges időszaki forrásként kezeld. Tervezett utolsó munkanap: "+(work.isEmpty()?"nincs megadva":work)+".";
+-            userNotes=guided+(userNotes.isEmpty()?"":" Felhasználói megjegyzés: "+userNotes);
+-        }
++        LocalDate due;
++        try { due=LocalDate.parse(dueDate.getText().toString().trim()); } catch(Exception ex){ p.dismiss(); toast("Hibás várható szülési dátum."); return; }
++        LocalDate csedStart=earlyCsed.isChecked()?due.minusDays(28):due;
++        LocalDate importWindowStart=csedStart.minusYears(2);
++        String work=state.plannedWorkEnd==null?"":state.plannedWorkEnd.getText().toString().trim();
++        String guided="EGYSÉGES AI TELJES IMPORT. CSED-kezdőnap: "+csedStart+". Import-időablak: "+importWindowStart+" – "+csedStart+". A NEAK biztosítási listát elsődleges időszaki forrásként, a NAV-ot havi járulékalap-forrásként, a szerződést a munkáltató/jogviszony/kezdőnap és explicit havi bruttó bér bizonyítékaként kezeld. Tervezett utolsó munkanap: "+(work.isEmpty()?"nincs megadva":work)+".";
++        userNotes=guided+(userNotes.isEmpty()?"":" Felhasználói megjegyzés: "+userNotes);
+         List<Uri> selected=new ArrayList<>(state.uris);
+         final String analysisNotes=userNotes;
+         new Thread(() -> { try { OpenAIClient.BatchExtraction result=OpenAIClient.extractEmploymentBatch(this,selected,analysisNotes,key,SecureStore.getModel(this)); runOnUiThread(() -> {
+             p.dismiss(); if(activeBatchImport!=state)return;
+             if(result.jobs.isEmpty()){showHelp("Nincs létrehozható jogviszony","Az AI nem talált kellően alátámasztott biztosítási/jövedelmi jogviszonyt a csomagban. Ellenőrizd a fájlokat és próbáld újra.");return;}
+             List<EmploymentPeriod> importedJobs = new ArrayList<>();
++            List<OpenAIClient.EmploymentExtraction> supportOnly = new ArrayList<>();
+             for(OpenAIClient.EmploymentExtraction e:result.jobs){
+                 try {
+                     String rel=e.relationType.isEmpty()?"Egyéb":e.relationType;
+-                    LocalDate st=LocalDate.parse(!e.start.isEmpty()?e.start:e.evidenceStart);
+-                    LocalDate en=(e.ongoing||e.end.isEmpty())?null:LocalDate.parse(e.end);
++                    String startText=!e.start.isEmpty()?e.start:e.evidenceStart;
++                    if(startText.isEmpty()){ if(!e.employer.isEmpty()) supportOnly.add(e); continue; }
++                    LocalDate st=LocalDate.parse(startText);
++                    LocalDate en=null;
++                    if(!e.end.isEmpty()) en=LocalDate.parse(e.end);
++                    else if(e.ongoing && e.ongoingEvidence) en=null;
++                    else if(!e.evidenceEnd.isEmpty()) en=LocalDate.parse(e.evidenceEnd);
++                    else if(isContractDocument(e.documentType) && e.ongoingEvidence) en=null;
+                     boolean insured="igen".equals(e.insuredStatus)||e.insuranceEvidence||"Munkaviszony".equals(rel)||"Közszolgálati jogviszony".equals(rel)||"Tartós megbízás".equals(rel)||"Egyéni vállalkozó".equals(rel)||"Társas vállalkozó".equals(rel);
+-                    if(("Normál megbízás".equals(rel)||"Választott tisztségviselő".equals(rel)||"Munkavégzésre irányuló egyéb jogviszony".equals(rel))&&!e.insuranceEvidence&&e.monthlyGross>0) insured=CalculatorEngine.normalMandateLikelyInsured(st,e.monthlyGross);
++                    long contractGross=("CONTRACT".equalsIgnoreCase(e.monthlyGrossSource)||"PAYSLIP".equalsIgnoreCase(e.monthlyGrossSource))?Math.max(0,e.monthlyGross):0;
++                    if(("Normál megbízás".equals(rel)||"Választott tisztségviselő".equals(rel)||"Munkavégzésre irányuló egyéb jogviszony".equals(rel))&&!e.insuranceEvidence&&contractGross>0) insured=CalculatorEngine.normalMandateLikelyInsured(st,contractGross);
+                     List<String> ev=new ArrayList<>();
+                     ev.add((e.documentType.isEmpty()?"AI teljes import":e.documentType+" • AI teljes import")+(e.notes.isEmpty()?"":" • "+e.notes));
+                     List<EmploymentPeriod.IncomeRecord> incomes=new ArrayList<>();
+                     for(OpenAIClient.IncomeExtraction ir:e.incomeRecords){
+                         try{if(ir.contributionIncome>0&&!ir.start.isEmpty())incomes.add(new EmploymentPeriod.IncomeRecord(LocalDate.parse(ir.start),ir.end.isEmpty()?LocalDate.parse(ir.start):LocalDate.parse(ir.end),ir.contributionIncome,ir.incomeDays,ir.official,ir.source));}catch(Exception ignored){}
+                     }
+-                    importedJobs.add(new EmploymentPeriod(e.relationshipId,e.employer.isEmpty()?"Azonosítatlan jogviszony":e.employer,rel,st,en,e.monthlyGross,insured,Math.max(0,e.unpaidDays),Math.max(0,e.sickPayDays),ev,incomes));
++                    importedJobs.add(new EmploymentPeriod(e.relationshipId,e.employer.isEmpty()?"Azonosítatlan jogviszony":e.employer,rel,st,en,contractGross,insured,Math.max(0,e.unpaidDays),Math.max(0,e.sickPayDays),ev,incomes));
+                 } catch(Exception ignored){}
+             }
++            List<EmploymentPeriod> normalized = EmploymentImportNormalizer.normalize(importedJobs);
++            applySupportOnlyExtractions(normalized, supportOnly);
++            normalized = EmploymentImportNormalizer.normalize(normalized);
++            normalized = EligibilityImportProcessor.filterToCsedImportWindow(normalized, importWindowStart, csedStart);
+             jobs.clear();
+-            jobs.addAll(EmploymentImportNormalizer.normalize(importedJobs));
+-            renderJobs(); state.dialog.dismiss();
++            jobs.addAll(normalized);
++            markResultsDirty(); renderJobs(); state.dialog.dismiss();
+             String msg="A dokumentumonkénti, gyorsítótárazott AI-kinyerés és determinisztikus összevonás után "+jobs.size()+" jogviszony maradt a "+selected.size()+" dokumentumból. A NAV havi jövedelmi sorok a jogviszonyokon belül, külön jövedelmi rekordként maradnak meg, ezért nem duplázzák a 365 napot."+(result.coverageSummary().isEmpty()?"":"\n\nAdatcsomag-ellenőrzés:\n"+result.coverageSummary())+(result.notes.isEmpty()?"":"\n\n"+result.notes);
+-            showHelp(state.eligibilityPackage?"Jogosultsági adatcsomag feldolgozva":"AI teljes import kész",msg+"\n\nA kalkuláció a biztosítási jogviszonyt és a tényleges NAV-jövedelmi rekordokat külön kezeli.");
++            showHelp("AI teljes import kész",msg+"\n\nA kalkuláció a biztosítási jogviszonyt és a tényleges NAV-jövedelmi rekordokat külön kezeli.");
+         }); } catch(Exception e){ runOnUiThread(() -> { p.dismiss(); showHelp("AI-import hiba",e.getMessage()==null?"Ismeretlen hiba":e.getMessage()); }); } }).start();
+     }
+ 
++    private boolean isContractDocument(String documentType) {
++     
