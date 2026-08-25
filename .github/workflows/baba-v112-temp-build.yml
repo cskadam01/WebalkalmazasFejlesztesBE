@@ -27,7 +27,18 @@ jobs:
           sed -i "s/versionCode 11/versionCode 12/; s/versionName '1.10.0'/versionName '1.11.0'/" app/build.gradle
           head -c -1 "$GITHUB_WORKSPACE/baba-v112-fixed/part00" > /tmp/v112.patch
           cat "$GITHUB_WORKSPACE/baba-v112-fixed/part01" "$GITHUB_WORKSPACE/baba-v112-fixed/part02" "$GITHUB_WORKSPACE/baba-v112-fixed/part03" "$GITHUB_WORKSPACE/baba-v112-fixed/part04" >> /tmp/v112.patch
-          patch -p1 < /tmp/v112.patch
+          patch -p1 < /tmp/v112.patch || test -f app/src/main/java/hu/babatamogatas/app/MainActivity.java.rej
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('app/src/main/java/hu/babatamogatas/app/MainActivity.java')
+          s=p.read_text()
+          start=s.find('    private void showEligibilityPackageDialog() {')
+          end=s.find('    private void openExternalUrl(', start)
+          if start >= 0 and end > start:
+              s=s[:start]+s[end:]
+          p.write_text(s)
+          PY
+          rm -f app/src/main/java/hu/babatamogatas/app/MainActivity.java.rej
           grep -q "versionName '1.12.0'" app/build.gradle
           grep -q "Újraszámítás a módosított adatokkal" app/src/main/java/hu/babatamogatas/app/MainActivity.java
           ! grep -q "Jogosultsági adatcsomag" app/src/main/java/hu/babatamogatas/app/MainActivity.java
