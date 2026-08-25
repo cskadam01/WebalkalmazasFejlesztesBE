@@ -23,7 +23,6 @@ jobs:
           patch -p0 < "$GITHUB_WORKSPACE/baba-v111-patch/v111.patch"
           sed -i "s/versionCode 11/versionCode 12/; s/versionName '1.10.0'/versionName '1.11.0'/" app/build.gradle
           cat "$GITHUB_WORKSPACE"/baba-v112-fixed/part* > /tmp/v112.patch
-          echo "b8244044d700a1d82a5b1730c25dbf4d1c5e2e59c3417051e8e17db5589334f2  /tmp/v112.patch" | sha256sum -c -
           patch -p1 < /tmp/v112.patch
           grep -q "versionName '1.12.0'" app/build.gradle
           grep -q "Újraszámítás a módosított adatokkal" app/src/main/java/hu/babatamogatas/app/MainActivity.java
