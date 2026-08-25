@@ -1,0 +1,74 @@
+   if(documentType==null)return false;
++        String x=documentType.toUpperCase(Locale.ROOT);
++        return x.contains("MUNKASZERZ") || x.contains("MEGBIZASI_SZERZ") || x.contains("SZERZODES") || x.contains("SZERZŐDÉS");
++    }
++
++    private void applySupportOnlyExtractions(List<EmploymentPeriod> base, List<OpenAIClient.EmploymentExtraction> supportOnly) {
++        if(base==null||supportOnly==null)return;
++        for(OpenAIClient.EmploymentExtraction e:supportOnly){
++            if(e==null||e.employer==null||e.employer.trim().isEmpty())continue;
++            String rel=e.relationType==null||e.relationType.trim().isEmpty()?"Munkaviszony":e.relationType;
++            for(EmploymentPeriod p:base){
++                if(!EmploymentImportNormalizer.sameEmployer(p.employer,e.employer))continue;
++                if(!EmploymentImportNormalizer.sameRelationType(p.relationType,rel))continue;
++                if(("CONTRACT".equalsIgnoreCase(e.monthlyGrossSource)||"PAYSLIP".equalsIgnoreCase(e.monthlyGrossSource))&&e.monthlyGross>0) p.monthlyGross=e.monthlyGross;
++                if(e.insuranceEvidence||"igen".equals(e.insuredStatus))p.insured=true;
++                p.sickPayDays=Math.max(p.sickPayDays,Math.max(0,e.sickPayDays));
++                p.unpaidDays=Math.max(p.unpaidDays,Math.max(0,e.unpaidDays));
++                String ev=(e.documentType==null||e.documentType.isEmpty()?"Kiegészítő dokumentum":e.documentType)+" • AI teljes import"+(e.notes==null||e.notes.isEmpty()?"":" • "+e.notes);
++                if(!p.documentEvidence.contains(ev))p.documentEvidence.add(ev);
++                break;
++            }
++        }
++    }
++
++    private void markResultsDirty() {
++        if(resultBox!=null && resultBox.getChildCount()>0){
++            if(recalculateButton!=null)recalculateButton.setVisibility(View.VISIBLE);
++            if(shareButton!=null)shareButton.setVisibility(View.GONE);
++            lastShareText="";
++        }
++    }
++
+     private void showJobDialog(int editIndex) {
+         EmploymentPeriod existing = editIndex >= 0 && editIndex < jobs.size() ? jobs.get(editIndex) : null;
+         JobDialogState state = new JobDialogState(); state.editIndex = editIndex;
+@@ -337,7 +362,7 @@
+         AlertDialog dlg=new AlertDialog.Builder(this).setTitle(existing==null?"Új munka / jogviszony":"Munka / jogviszony szerkesztése").setView(scroll).setPositiveButton(existing==null?"Hozzáadás":"Módosítás mentése",null).setNegativeButton("Mégse",null).create();state.dialog=dlg;activeJobDialog=state;
+         document.setOnClickListener(v->{if(SecureStore.getApiKey(this).isEmpty()){new AlertDialog.Builder(this).setTitle("OpenAI API-kulcs szükséges").setMessage("A dokumentumok és képek automatikus feldolgozásához előbb add meg az OpenAI API-kulcsot a Beállításokban. Kézzel továbbra is kitölthető minden mező.").setPositiveButton("Beállítások",(d,w)->showSettings()).setNegativeButton("Mégse",null).show();return;}Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("*/*");i.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/pdf","image/jpeg","image/png","image/webp","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","text/plain"});i.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,REQ_JOB_DOCUMENT);});
+         dlg.setOnDismissListener(d->{if(activeJobDialog==state)activeJobDialog=null;});
+-        dlg.setOnShowListener(v->dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(w->{try{String rel=String.valueOf(state.relationType.getSelectedItem());LocalDate st=LocalDate.parse(state.start.getText().toString().trim());long amount=state.gross.getText().toString().trim().isEmpty()?0:Long.parseLong(state.gross.getText().toString().trim());boolean ins=state.insured.isChecked();if("Munkaviszony".equals(rel)||"Közszolgálati jogviszony".equals(rel)||"Tartós megbízás".equals(rel)||"Egyéni vállalkozó".equals(rel)||"Társas vállalkozó".equals(rel))ins=true;if("Normál megbízás".equals(rel)&&amount>0&&!state.aiStatus.getText().toString().contains("TB/biztosítás igazolva")){ins=CalculatorEngine.normalMandateLikelyInsured(st,amount);}EmploymentPeriod ep=new EmploymentPeriod(state.relationshipId,state.employer.getText().toString().trim(),rel,st,state.end.getText().toString().trim().isEmpty()?null:LocalDate.parse(state.end.getText().toString().trim()),amount,ins,parseInt(state.unpaid),parseInt(state.sick),state.evidence,state.incomes);if(ep.employer.isEmpty()){toast("Add meg a munkáltató, megbízó vagy jogviszony nevét.");return;}if(state.editIndex>=0&&state.editIndex<jobs.size())jobs.set(state.editIndex,ep);else jobs.add(ep);renderJobs();dlg.dismiss();}catch(Exception e){toast("Hibás vagy hiányzó dátum/összeg. Dátumpélda: 2026-08-23");}}));dlg.show();
++        dlg.setOnShowListener(v->dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(w->{try{String rel=String.valueOf(state.relationType.getSelectedItem());LocalDate st=LocalDate.parse(state.start.getText().toString().trim());long amount=state.gross.getText().toString().trim().isEmpty()?0:Long.parseLong(state.gross.getText().toString().trim());boolean ins=state.insured.isChecked();if("Munkaviszony".equals(rel)||"Közszolgálati jogviszony".equals(rel)||"Tartós megbízás".equals(rel)||"Egyéni vállalkozó".equals(rel)||"Társas vállalkozó".equals(rel))ins=true;if("Normál megbízás".equals(rel)&&amount>0&&!state.aiStatus.getText().toString().contains("TB/biztosítás igazolva")){ins=CalculatorEngine.normalMandateLikelyInsured(st,amount);}EmploymentPeriod ep=new EmploymentPeriod(state.relationshipId,state.employer.getText().toString().trim(),rel,st,state.end.getText().toString().trim().isEmpty()?null:LocalDate.parse(state.end.getText().toString().trim()),amount,ins,parseInt(state.unpaid),parseInt(state.sick),state.evidence,state.incomes);if(ep.employer.isEmpty()){toast("Add meg a munkáltató, megbízó vagy jogviszony nevét.");return;}if(state.editIndex>=0&&state.editIndex<jobs.size())jobs.set(state.editIndex,ep);else jobs.add(ep);markResultsDirty();renderJobs();dlg.dismiss();}catch(Exception e){toast("Hibás vagy hiányzó dátum/összeg. Dátumpélda: 2026-08-23");}}));dlg.show();
+     }
+ 
+     private void analyzeDocumentIntoJob(Uri uri) {
+@@ -350,7 +375,7 @@
+     private void selectSpinner(Spinner spinner,String value){if(value==null)return;for(int i=0;i<spinner.getCount();i++)if(value.equalsIgnoreCase(String.valueOf(spinner.getItemAtPosition(i)))){spinner.setSelection(i);return;}}
+ 
+     private int parseInt(EditText e){ try{return Integer.parseInt(e.getText().toString());}catch(Exception x){return 0;} }
+-    private void loadSample(){ jobs.clear(); jobs.add(new EmploymentPeriod("Minta Kft.","Munkaviszony",LocalDate.now().minusYears(2),null,650000,true,0,20,Collections.singletonList("MUNKASZERZODES • minta dokumentum"))); renderJobs(); }
++    private void loadSample(){ jobs.clear(); jobs.add(new EmploymentPeriod("Minta Kft.","Munkaviszony",LocalDate.now().minusYears(2),null,650000,true,0,20,Collections.singletonList("MUNKASZERZODES • minta dokumentum"))); markResultsDirty(); renderJobs(); }
+ 
+     private void renderJobs() {
+         if (jobsBox == null) return;
+@@ -367,7 +392,7 @@
+             LinearLayout btns=new LinearLayout(this); btns.setOrientation(LinearLayout.VERTICAL);
+             Button edit=smallButton("Szerkesztés"); edit.setOnClickListener(v->showJobDialog(removeIndex)); btns.addView(edit);
+             Button del=smallButton("Törlés"); del.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Jogviszony törlése").setMessage("Biztosan törlöd ezt a munkát?" )
+-                    .setPositiveButton("Törlés",(d,w)->{jobs.remove(removeIndex);renderJobs();}).setNegativeButton("Mégse",null).show()); btns.addView(del);
++                    .setPositiveButton("Törlés",(d,w)->{jobs.remove(removeIndex);markResultsDirty();renderJobs();}).setNegativeButton("Mégse",null).show()); btns.addView(del);
+             row.addView(btns);
+             jobsBox.addView(row);
+         }
+@@ -394,7 +419,7 @@
+             if(!r.suggestions.isEmpty()) resultBox.addView(infoBlock("Javaslatok", r.suggestions));
+             if(!r.warnings.isEmpty()) resultBox.addView(infoBlock("Ellenőrizendő", r.warnings));
+             lastShareText = buildShareText(due, r);
+-            shareButton.setVisibility(View.VISIBLE);
++            shareButton.setVisibility(View.VISIBLE); if(recalculateButton!=null) recalculateButton.setVisibility(View.VISIBLE);
+         } catch(Exception e) { toast("Add meg a várható szülés dátumát és legalább egy jogviszonyt."); }
+     }
+ 
+diff -ruN v111base/app/src/main/java/hu/babatamogatas/app/OpenAIClient.java v112src/app/src/main/java/hu/babatamogatas/app/OpenAIClient.java
+--- v111base/app/src/main/java/hu/babatamogatas/app/OpenAIClient.java	2026-08-25 05:18:03.000000000 +0000
++++ v112src/app/src/main/java/hu/babatamogata
