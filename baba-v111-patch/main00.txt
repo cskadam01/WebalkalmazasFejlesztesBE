@@ -1,0 +1,136 @@
+package hu.babatamogatas.app;
+
+import android.app.*;
+import android.os.Bundle;
+import android.content.*;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.net.Uri;
+import android.text.InputType;
+import android.view.*;
+import android.widget.*;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.util.*;
+
+public class MainActivity extends Activity {
+    private LinearLayout root, jobsBox, resultBox;
+    private EditText dueDate;
+    private CheckBox earlyCsed, workAfter90, contributionRelief;
+    private final List<EmploymentPeriod> jobs = new ArrayList<>();
+    private String lastShareText = "";
+    private Button shareButton;
+    private JobDialogState activeJobDialog;
+    private static final int REQ_JOB_DOCUMENT = 88;
+    private static final int REQ_BATCH_DOCUMENTS = 89;
+    private BatchImportState activeBatchImport;
+
+
+    private static class BatchImportState {
+        AlertDialog dialog;
+        EditText notes, plannedWorkEnd;
+        TextView selectedInfo;
+        boolean eligibilityPackage = false;
+        final List<Uri> uris = new ArrayList<>();
+    }
+
+    private static class JobDialogState {
+        AlertDialog dialog;
+        EditText employer, start, end, gross, sick, unpaid;
+        CheckBox insured;
+        Spinner relationType;
+        TextView aiStatus, documentLog;
+        final List<String> evidence = new ArrayList<>();
+        final List<EmploymentPeriod.IncomeRecord> incomes = new ArrayList<>();
+        String relationshipId = "";
+        int editIndex;
+    }
+
+    private final int rose = Color.rgb(181, 86, 119);
+    private final int roseDark = Color.rgb(130, 57, 82);
+    private final int ink = Color.rgb(57, 47, 52);
+    private final int muted = Color.rgb(116, 101, 107);
+    private final int pale = Color.rgb(255, 249, 251);
+    private final int softRose = Color.rgb(250, 232, 238);
+
+    @Override public void onCreate(Bundle b) { super.onCreate(b); buildUi(); }
+
+    private void buildUi() {
+        ScrollView scroll = new ScrollView(this);
+        root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(16), dp(12), dp(16), dp(34));
+        root.setBackgroundColor(pale);
+        scroll.addView(root);
+        setContentView(scroll);
+
+        addTopBar();
+        addHero();
+        addBabyCard();
+        addJobsCard();
+        addCalculateCard();
+        addFooter();
+    }
+
+    private void addTopBar() {
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        TextView brand = text("BabaEllátás", 18, true);
+        brand.setTextColor(roseDark);
+        bar.addView(brand, new LinearLayout.LayoutParams(0, -2, 1));
+        Button help = smallButton("? Súgó");
+        help.setOnClickListener(v -> showGeneralHelp());
+        Button settings = smallButton("⚙ Beállítások");
+        settings.setOnClickListener(v -> showSettings());
+        bar.addView(help);
+        bar.addView(settings);
+        root.addView(bar);
+    }
+
+    private void addHero() {
+        LinearLayout hero = new LinearLayout(this);
+        hero.setOrientation(LinearLayout.VERTICAL);
+        hero.setPadding(dp(18), dp(18), dp(18), dp(18));
+        hero.setBackgroundResource(R.drawable.hero_bg);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, dp(12), 0, dp(8));
+        hero.setLayoutParams(lp);
+        TextView t = text("CSED & GYED kalkulátor", 26, true);
+        t.setTextColor(roseDark);
+        hero.addView(t);
+        TextView sub = text("Jogosultság, várható bruttó/nettó ellátás és személyre szabott ellenőrzési pontok.", 14, false);
+        sub.setTextColor(muted);
+        hero.addView(sub);
+        root.addView(hero);
+    }
+
+    private void addBabyCard() {
+        LinearLayout c = card();
+        c.addView(sectionHeader("1. Baba és időzítés", "A várható szülés dátuma meghatározza a CSED lehetséges kezdetét, a 2 éves biztosítási vizsgálati időszakot és a GYED várható időtartamát.", "Időzítés súgó"));
+        c.addView(label("Várható szülés dátuma"));
+        dueDate = input("ÉÉÉÉ-HH-NN");
+        dueDate.setText(LocalDate.now().plusMonths(5).toString());
+        c.addView(dueDate);
+        earlyCsed = check("CSED induljon 28 nappal a várható szülés előtt", false);
+        workAfter90 = check("Keresőtevékenység a CSED 90. napja után", false);
+        contributionRelief = check("Családi járulékkedvezmény felhasználható a GYED járulékára", false);
+        c.addView(earlyCsed); c.addView(workAfter90); c.addView(contributionRelief);
+        root.addView(c);
+    }
+
+    private void addJobsCard() {
+        LinearLayout c = card();
+        c.addView(sectionHeader("2. Munkák és bérek", "Add meg a szülést megelőző időszak biztosítási jogviszonyait. Egy jogviszonyhoz több dokumentumot is feldolgozhatsz AI-val: munkaszerződést, megbízási szerződést, munkaköri leírást, bér/járulék-kimutatást, táppénzes igazolást vagy ezek fotóját. A felismert adatokat mentés előtt mindig ellenőrizheted és módosíthatod.", "Jogviszony súgó"));
+        jobsBox = new LinearLayout(this); jobsBox.setOrientation(LinearLayout.VERTICAL); c.addView(jobsBox);
+        TextView empty = text("Még nincs hozzáadott jogviszony.", 13, false); empty.setTextColor(muted); empty.setTag("empty"); jobsBox.addView(empty);
+        LinearLayout actions = horizontal();
+        Button add = button("+ Új hozzáadása"); add.setOnClickListener(v -> showJobDialog(-1));
+        Button aiImport = secondaryButton("✨ AI teljes import"); aiImport.setOnClickListener(v -> showBatchImportDialog());
+        actions.addView(add, new LinearLayout.LayoutParams(0, -2, 1));
+        actions.addView(aiImport, new LinearLayout.LayoutParams(0, -2, 1));
+        c.addView(actions);
+        Button eligibilityPack = secondaryButton("📂 Jogosultsági adatcsomag");
