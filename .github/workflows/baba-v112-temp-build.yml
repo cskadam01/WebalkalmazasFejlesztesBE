@@ -1,0 +1,87 @@
+name: Temporary BabaEllatas v1.12 APK Build
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/baba-v112-temp-build.yml]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: baba-v112-apk
+
+      - name: Reconstruct v1.11 and apply v1.12
+        shell: bash
+        run: |
+          cat baba-v110-bin/c00_0 baba-v110-bin/c00_1 baba-v110-bin/chunk01 baba-v110-bin/chunk02 baba-v110-bin/chunk03 baba-v110-bin/chunk04 baba-v110-bin/chunk05 > /tmp/BabaEllatas_2026_v1.10_Source.zip
+          echo "c7f09be607017f89783d9545bffb49a59b2b1222997fc2f09803dcb6c0bd6840  /tmp/BabaEllatas_2026_v1.10_Source.zip" | sha256sum -c -
+          rm -rf /tmp/baba-v112-src
+          mkdir -p /tmp/baba-v112-src
+          unzip -q /tmp/BabaEllatas_2026_v1.10_Source.zip -d /tmp/baba-v112-src
+          cd /tmp/baba-v112-src
+          patch -p0 < "$GITHUB_WORKSPACE/baba-v111-patch/v111.patch"
+          sed -i "s/versionCode 11/versionCode 12/; s/versionName '1.10.0'/versionName '1.11.0'/" app/build.gradle
+          head -c -1 "$GITHUB_WORKSPACE/baba-v112-fixed/part00" > /tmp/v112.patch
+          cat "$GITHUB_WORKSPACE/baba-v112-fixed/part01" "$GITHUB_WORKSPACE/baba-v112-fixed/part02" "$GITHUB_WORKSPACE/baba-v112-fixed/part03" "$GITHUB_WORKSPACE/baba-v112-fixed/part04" >> /tmp/v112.patch
+          patch -p1 < /tmp/v112.patch
+          grep -q "versionName '1.12.0'" app/build.gradle
+          grep -q "Újraszámítás a módosított adatokkal" app/src/main/java/hu/babatamogatas/app/MainActivity.java
+          ! grep -q "Jogosultsági adatcsomag" app/src/main/java/hu/babatamogatas/app/MainActivity.java
+          grep -q "filterToCsedImportWindow" app/src/main/java/hu/babatamogatas/app/MainActivity.java
+          grep -q "minden munkaszerződést kötelező" app/src/main/java/hu/babatamogatas/app/OpenAIClient.java
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Run all regressions
+        working-directory: /tmp/baba-v112-src
+        shell: bash
+        run: |
+          rm -rf /tmp/baba-v112-tests
+          mkdir -p /tmp/baba-v112-tests
+          javac -d /tmp/baba-v112-tests \
+            app/src/main/java/hu/babatamogatas/app/EmploymentPeriod.java \
+            app/src/main/java/hu/babatamogatas/app/CalculationResult.java \
+            app/src/main/java/hu/babatamogatas/app/CalculatorEngine.java \
+            app/src/main/java/hu/babatamogatas/app/EmploymentImportNormalizer.java \
+            app/src/main/java/hu/babatamogatas/app/EligibilityImportProcessor.java \
+            engine-test/TestCalculatorV18.java \
+            engine-test/TestCalculatorV19.java \
+            engine-test/TestImportNormalizer.java \
+            engine-test/TestImportV112.java
+          java -cp /tmp/baba-v112-tests TestCalculatorV18
+          java -cp /tmp/baba-v112-tests TestCalculatorV19
+          java -cp /tmp/baba-v112-tests TestImportNormalizer
+          java -cp /tmp/baba-v112-tests TestImportV112
+
+      - name: Build APK
+        working-directory: /tmp/baba-v112-src
+        run: gradle assembleDebug --stacktrace
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          APK=$(find /tmp/baba-v112-src/app/build/outputs/apk/debug -name '*.apk' | head -1)
+          test -n "$APK"
+          file "$APK"
+          unzip -t "$APK"
+          sha256sum "$APK" | tee /tmp/BabaEllatas-v1.12.sha256
+          cp "$APK" /tmp/BabaEllatas-2026-v1.12.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BabaEllatas-2026-v1.12-APK
+          path: |
+            /tmp/BabaEllatas-2026-v1.12.apk
+            /tmp/BabaEllatas-v1.12.sha256
+          if-no-files-found: error
