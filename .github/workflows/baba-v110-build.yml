@@ -1,4 +1,4 @@
-name: Build BabaEllatas v1.11 APK
+name: Build BabaEllatas v1.12 APK
 
 on:
   pull_request:
@@ -11,23 +11,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Reconstruct v1.10 base and apply v1.11 patch
+      - name: Reconstruct v1.11 and apply v1.12
         shell: bash
         run: |
           cat baba-v110-bin/c00_0 baba-v110-bin/c00_1 baba-v110-bin/chunk01 baba-v110-bin/chunk02 baba-v110-bin/chunk03 baba-v110-bin/chunk04 baba-v110-bin/chunk05 > /tmp/BabaEllatas_2026_v1.10_Source.zip
           echo "c7f09be607017f89783d9545bffb49a59b2b1222997fc2f09803dcb6c0bd6840  /tmp/BabaEllatas_2026_v1.10_Source.zip" | sha256sum -c -
-          rm -rf /tmp/baba-v111-src
-          mkdir -p /tmp/baba-v111-src
-          unzip -q /tmp/BabaEllatas_2026_v1.10_Source.zip -d /tmp/baba-v111-src
-          cd /tmp/baba-v111-src
+          rm -rf /tmp/baba-v112-src
+          mkdir -p /tmp/baba-v112-src
+          unzip -q /tmp/BabaEllatas_2026_v1.10_Source.zip -d /tmp/baba-v112-src
+          cd /tmp/baba-v112-src
           patch -p0 < "$GITHUB_WORKSPACE/baba-v111-patch/v111.patch"
           sed -i "s/versionCode 11/versionCode 12/; s/versionName '1.10.0'/versionName '1.11.0'/" app/build.gradle
-          echo "d93b94c1681647858f6f5dd3283782ded2b74841dea01e27b622143e29783da4  app/src/main/java/hu/babatamogatas/app/OpenAIClient.java" | sha256sum -c -
-          echo "cedee48eda1c9a19355c2600006e91db55ec6a1c4f55899f19e6f027229f97c5  app/src/main/java/hu/babatamogatas/app/MainActivity.java" | sha256sum -c -
-          echo "c9b382a1e7aea3f7f1479b6020571a09e33de2184c1d2a5f42c2e8fb7512093f  app/build.gradle" | sha256sum -c -
-          grep -q "temperature.*0.0" app/src/main/java/hu/babatamogatas/app/OpenAIClient.java
-          grep -q "json_schema" app/src/main/java/hu/babatamogatas/app/OpenAIClient.java
-          grep -q "ai_extraction_cache_v111" app/src/main/java/hu/babatamogatas/app/OpenAIClient.java
+          cat "$GITHUB_WORKSPACE"/baba-v112-fixed/part* > /tmp/v112.patch
+          echo "b8244044d700a1d82a5b1730c25dbf4d1c5e2e59c3417051e8e17db5589334f2  /tmp/v112.patch" | sha256sum -c -
+          patch -p1 < /tmp/v112.patch
+          grep -q "versionName '1.12.0'" app/build.gradle
+          grep -q "Újraszámítás a módosított adatokkal" app/src/main/java/hu/babatamogatas/app/MainActivity.java
+          ! grep -q "Jogosultsági adatcsomag" app/src/main/java/hu/babatamogatas/app/MainActivity.java
+          grep -q "filterToCsedImportWindow" app/src/main/java/hu/babatamogatas/app/MainActivity.java
+          grep -q "minden munkaszerződést kötelező" app/src/main/java/hu/babatamogatas/app/OpenAIClient.java
 
       - uses: actions/setup-java@v4
         with:
@@ -38,42 +40,45 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Run calculation and import regression tests
-        working-directory: /tmp/baba-v111-src
+      - name: Run all regressions
+        working-directory: /tmp/baba-v112-src
         shell: bash
         run: |
-          rm -rf /tmp/baba-v111-tests
-          mkdir -p /tmp/baba-v111-tests
-          javac -d /tmp/baba-v111-tests \
+          rm -rf /tmp/baba-v112-tests
+          mkdir -p /tmp/baba-v112-tests
+          javac -d /tmp/baba-v112-tests \
             app/src/main/java/hu/babatamogatas/app/EmploymentPeriod.java \
             app/src/main/java/hu/babatamogatas/app/CalculationResult.java \
             app/src/main/java/hu/babatamogatas/app/CalculatorEngine.java \
             app/src/main/java/hu/babatamogatas/app/EmploymentImportNormalizer.java \
+            app/src/main/java/hu/babatamogatas/app/EligibilityImportProcessor.java \
             engine-test/TestCalculatorV18.java \
             engine-test/TestCalculatorV19.java \
-            engine-test/TestImportNormalizer.java
-          java -cp /tmp/baba-v111-tests TestCalculatorV18
-          java -cp /tmp/baba-v111-tests TestCalculatorV19
-          java -cp /tmp/baba-v111-tests TestImportNormalizer
+            engine-test/TestImportNormalizer.java \
+            engine-test/TestImportV112.java
+          java -cp /tmp/baba-v112-tests TestCalculatorV18
+          java -cp /tmp/baba-v112-tests TestCalculatorV19
+          java -cp /tmp/baba-v112-tests TestImportNormalizer
+          java -cp /tmp/baba-v112-tests TestImportV112
 
       - name: Build APK
-        working-directory: /tmp/baba-v111-src
+        working-directory: /tmp/baba-v112-src
         run: gradle assembleDebug --stacktrace
 
       - name: Verify APK
         shell: bash
         run: |
-          APK=$(find /tmp/baba-v111-src/app/build/outputs/apk/debug -name '*.apk' | head -1)
+          APK=$(find /tmp/baba-v112-src/app/build/outputs/apk/debug -name '*.apk' | head -1)
           test -n "$APK"
           file "$APK"
           unzip -t "$APK"
-          sha256sum "$APK" | tee /tmp/BabaEllatas-v1.11.sha256
-          cp "$APK" /tmp/BabaEllatas-2026-v1.11.apk
+          sha256sum "$APK" | tee /tmp/BabaEllatas-v1.12.sha256
+          cp "$APK" /tmp/BabaEllatas-2026-v1.12.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: BabaEllatas-2026-v1.11-APK
+          name: BabaEllatas-2026-v1.12-APK
           path: |
-            /tmp/BabaEllatas-2026-v1.11.apk
-            /tmp/BabaEllatas-v1.11.sha256
+            /tmp/BabaEllatas-2026-v1.12.apk
+            /tmp/BabaEllatas-v1.12.sha256
           if-no-files-found: error
