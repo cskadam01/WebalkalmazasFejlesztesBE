@@ -1,0 +1,214 @@
+--- app/src/main/java/hu/babatamogatas/app/MainActivity.java
++++ app/src/main/java/hu/babatamogatas/app/MainActivity.java
+@@ -268,12 +268,12 @@
+     }
+ 
+     private void updateBatchSelectedInfo(BatchImportState state) {
+-        if(state==null)return; state.selectedInfo.setText(state.uris.isEmpty()?"Még nincs kiválasztott fájl.":("Kiválasztott fájlok: "+state.uris.size()+" db\nAz AI ezeket egyetlen közös elemzésben dolgozza fel."));
++        if(state==null)return; state.selectedInfo.setText(state.uris.isEmpty()?"Még nincs kiválasztott fájl.":("Kiválasztott fájlok: "+state.uris.size()+" db\nAz AI minden fájlt külön, forráshűen dolgoz fel, majd a program determinisztikusan összevonja az eredményeket."));
+     }
+ 
+     private void analyzeBatchImport(BatchImportState state) {
+         String key=SecureStore.getApiKey(this); if(key.isEmpty()){showSettings();return;}
+-        ProgressDialog p=new ProgressDialog(this); p.setTitle("Teljes dokumentumcsomag elemzése"); p.setMessage("Fájlok feltöltése, jogviszonyok összekapcsolása és a teljes lista összeállítása…"); p.setIndeterminate(true); p.setCancelable(false); p.show();
++        ProgressDialog p=new ProgressDialog(this); p.setTitle("Teljes dokumentumcsomag elemzése"); p.setMessage("Fájlok dokumentumonkénti, szigorú sémás feldolgozása és determinisztikus összevonása…"); p.setIndeterminate(true); p.setCancelable(false); p.show();
+         String userNotes=state.notes.getText().toString().trim();
+         if(state.eligibilityPackage){
+             int y=LocalDate.now().getYear();
+@@ -306,7 +306,7 @@
+             jobs.clear();
+             jobs.addAll(EmploymentImportNormalizer.normalize(importedJobs));
+             renderJobs(); state.dialog.dismiss();
+-            String msg="A kétlépcsős AI-ellenőrzés és a determinisztikus összevonás után "+jobs.size()+" jogviszony maradt a "+selected.size()+" dokumentumból. A NAV havi jövedelmi sorok a jogviszonyokon belül, külön jövedelmi rekordként maradnak meg, ezért nem duplázzák a 365 napot."+(result.coverageSummary().isEmpty()?"":"\n\nAdatcsomag-ellenőrzés:\n"+result.coverageSummary())+(result.notes.isEmpty()?"":"\n\n"+result.notes);
++            String msg="A dokumentumonkénti, gyorsítótárazott AI-kinyerés és determinisztikus összevonás után "+jobs.size()+" jogviszony maradt a "+selected.size()+" dokumentumból. A NAV havi jövedelmi sorok a jogviszonyokon belül, külön jövedelmi rekordként maradnak meg, ezért nem duplázzák a 365 napot."+(result.coverageSummary().isEmpty()?"":"\n\nAdatcsomag-ellenőrzés:\n"+result.coverageSummary())+(result.notes.isEmpty()?"":"\n\n"+result.notes);
+             showHelp(state.eligibilityPackage?"Jogosultsági adatcsomag feldolgozva":"AI teljes import kész",msg+"\n\nA kalkuláció a biztosítási jogviszonyt és a tényleges NAV-jövedelmi rekordokat külön kezeli.");
+         }); } catch(Exception e){ runOnUiThread(() -> { p.dismiss(); showHelp("AI-import hiba",e.getMessage()==null?"Ismeretlen hiba":e.getMessage()); }); } }).start();
+     }
+--- app/src/main/java/hu/babatamogatas/app/OpenAIClient.java
++++ app/src/main/java/hu/babatamogatas/app/OpenAIClient.java
+@@ -14,10 +14,15 @@
+ import java.net.HttpURLConnection;
+ import java.net.URL;
+ import java.nio.charset.StandardCharsets;
++import java.security.MessageDigest;
+ import java.util.ArrayList;
++import java.util.Collections;
++import java.util.Comparator;
+ import java.util.List;
+ 
+ public final class OpenAIClient {
++    private static final String EXTRACTION_CACHE = "ai_extraction_cache_v111";
++    private static final String EXTRACTION_PROMPT_VERSION = "v1.11.0-doc-by-doc-schema";
+     private OpenAIClient() {}
+ 
+     public static final class IncomeExtraction {
+@@ -76,28 +81,89 @@
+     }
+ 
+     public static BatchExtraction extractEmploymentBatch(Context context, List<Uri> uris, String userNotes, String apiKey, String model) throws Exception {
++        if (uris == null || uris.isEmpty()) return new BatchExtraction();
++
++        // IMPORTANT: never let one document contaminate another document's amounts/dates.
++        // Each source is extracted independently using strict Structured Outputs, then Java merges deterministically.
++        List<DocumentWork> docs = new ArrayList<>();
++        for (Uri uri : uris) {
++            String hash = sha256Uri(context, uri);
++            String name = getFileName(context.getContentResolver(), uri);
++            docs.add(new DocumentWork(uri, hash, name));
++        }
++        Collections.sort(docs, Comparator.comparing((DocumentWork d) -> d.hash).thenComparing(d -> d.name));
++
++        BatchExtraction combined = new BatchExtraction();
++        for (DocumentWork d : docs) {
++            BatchExtraction one = extractSingleDocumentBatch(context, d, userNotes, apiKey, model);
++            combined.jobs.addAll(one.jobs);
++            combined.neakInsuranceList |= one.neakInsuranceList;
++            combined.payslipMonths += Math.max(0, one.payslipMonths);
++            combined.sickPayDocuments |= one.sickPayDocuments;
++            combined.contractDocuments |= one.contractDocuments;
++            for (Integer y : one.navContributionYears) if (y != null && y > 0 && !combined.navContributionYears.contains(y)) combined.navContributionYears.add(y);
++            if (!one.coverageNotes.isEmpty()) combined.coverageNotes += (combined.coverageNotes.isEmpty()?"":"\n") + d.name + ": " + one.coverageNotes;
++            if (!one.notes.isEmpty()) combined.notes += (combined.notes.isEmpty()?"":"\n") + d.name + ": " + one.notes;
++        }
++        Collections.sort(combined.navContributionYears);
++        sanitizeBatch(combined);
++        combined.jobs.sort(Comparator.comparing((EmploymentExtraction e) -> normalizeKey(e.employer))
++                .thenComparing(e -> normalizeKey(e.relationType))
++                .thenComparing(e -> e.start == null ? "" : e.start)
++                .thenComparing(e -> e.relationshipId == null ? "" : e.relationshipId));
++        return combined;
++    }
++
++    private static final class DocumentWork {
++        final Uri uri; final String hash; final String name;
++        DocumentWork(Uri uri, String hash, String name) { this.uri=uri; this.hash=hash; this.name=name==null?"document":name; }
++    }
++
++    private static BatchExtraction extractSingleDocumentBatch(Context context, DocumentWork d, String userNotes, String apiKey, String model) throws Exception {
++        String selectedModel = model == null || model.trim().isEmpty() ? "gpt-5.4-mini" : model.trim();
++        String noteKey = sha256Text(userNotes == null ? "" : userNotes.trim());
++        String cacheKey = sha256Text(EXTRACTION_PROMPT_VERSION + "|" + selectedModel + "|" + d.hash + "|" + noteKey);
++        android.content.SharedPreferences cache = context.getSharedPreferences(EXTRACTION_CACHE, Context.MODE_PRIVATE);
++        String cached = cache.getString(cacheKey, "");
++        if (!cached.isEmpty()) {
++            try { return sanitizeBatch(parseBatchExtraction(cached)); }
++            catch (Exception ignored) { cache.edit().remove(cacheKey).apply(); }
++        }
++
+         JSONArray content = new JSONArray();
+-        content.put(new JSONObject().put("type","input_text").put("text", batchPrompt(userNotes, uris == null ? 0 : uris.size())));
+-        if (uris != null) for (Uri uri : uris) {
+-            String mime = context.getContentResolver().getType(uri); if (mime == null) mime = "application/octet-stream";
+-            if (mime.startsWith("image/")) {
+-                byte[] bytes = readAll(context, uri, 18 * 1024 * 1024);
+-                String dataUrl = "data:" + mime + ";base64," + Base64.encodeToString(bytes, Base64.NO_WRAP);
+-                content.put(new JSONObject().put("type","input_image").put("image_url",dataUrl).put("detail","high"));
+-            } else {
+-                String fileName = getFileName(context.getContentResolver(), uri);
+-                String fileId = uploadFile(context, uri, fileName, mime, apiKey);
+-                content.put(new JSONObject().put("type","input_file").put("file_id",fileId));
+-            }
++        content.put(new JSONObject().put("type","input_text").put("text", singleDocumentPrompt(userNotes, d.name, d.hash)));
++        String mime = context.getContentResolver().getType(d.uri); if (mime == null) mime = "application/octet-stream";
++        if (mime.startsWith("image/")) {
++            byte[] bytes = readAll(context, d.uri, 18 * 1024 * 1024);
++            String dataUrl = "data:" + mime + ";base64," + Base64.encodeToString(bytes, Base64.NO_WRAP);
++            content.put(new JSONObject().put("type","input_image").put("image_url",dataUrl).put("detail","high"));
++        } else {
++            String fileId = uploadFile(context, d.uri, d.name, mime, apiKey);
++            content.put(new JSONObject().put("type","input_file").put("file_id",fileId));
+         }
+-        String firstRaw = callResponses(content, apiKey, model);
+-        BatchExtraction first = parseBatchExtraction(firstRaw);
+ 
+-        JSONArray auditContent = new JSONArray();
+-        for (int i = 0; i < content.length(); i++) auditContent.put(content.get(i));
+-        auditContent.put(new JSONObject().put("type","input_text").put("text", auditPrompt(firstRaw)));
+-        BatchExtraction audited = parseBatchExtraction(callResponses(auditContent, apiKey, model));
+-        return sanitizeBatch(audited);
++        String raw = callResponses(content, apiKey, selectedModel, true);
++        BatchExtraction parsed = sanitizeBatch(parseBatchExtraction(raw));
++        // Persist the exact structured extraction. Same bytes + same notes + same model => same result on later imports.
++        cache.edit().putString(cacheKey, raw).apply();
++        return parsed;
++    }
++
++    private static String singleDocumentPrompt(String userNotes, String fileName, String fileHash) {
++        int y = java.time.LocalDate.now().getYear();
++        return "FORRÁSHŰ KINYERÉS EGYETLEN magyar CSED/GYED dokumentumból. Fájl: " + fileName + ", SHA-256: " + fileHash + ". " +
++                "A dokumentum adatait önmagában dolgozd fel; SOHA ne használj más fájlból származó értéket. " +
++                "Felhasználói kiegészítés csak értelmezési segítség, nem bizonyíték: " + (userNotes==null||userNotes.trim().isEmpty()?"nincs":userNotes.trim()) + ". " +
++                "Ismerd fel az ÖSSZES, ebben az egy dokumentumban szereplő jogviszonyt és havi jövedelmi sort. " +
++                "NEAK: biztosítási jogviszony neve/típusa és explicit kezdő-végdátuma elsődleges. " +
++                "NAV: a saját munkáltatóhoz tartozó explicit biztosítási időszak és TB-járulékalapot képező jövedelem használható; a BEVALLÁSI HÓNAP önmagában nem jogviszony-kezdő/vég. " +
++                "Szerződés/bérlap: monthlyGross csak kifejezett HAVI BRUTTÓ szerződéses bér/díj lehet. NAV-járulékalapot, nettó összeget, adót, TB-járulékot vagy összes közterhet SOHA ne tegyél monthlyGross mezőbe. " +
++                "Egyszeri megbízási díjat ne alakíts havi bérré. Ha nincs explicit havi bruttó, monthlyGross=0 és monthlyGrossSource=NONE. " +
++                "A NAV havi sorokat ugyanahhoz a céghez/jogviszonyhoz incomeRecords-ként add. contributionIncome mindig az adott pontos időszak teljes járulékalapja. " +
++                "Ha ugyanabban a dokumentumban több külön jogviszonytípus van ugyanannál a cégnél, külön jobs elem legyen. " +
++                "ongoing=true kizárólag explicit 'fennáll' vagy nyitott jogviszony bizonyítékára; hiányzó végdátum önmagában nem ongoing. " +
++                "Hiányzó vagy bizonytalan értéket ne találj ki: üres string, 0 vagy false. " +
++                "Jelenlegi ellenőrzési évek: " + (y-2) + ", " + (y-1) + ", " + y + ".";
+     }
+ 
+     private static String batchPrompt(String userNotes, int fileCount) {
+@@ -240,11 +306,22 @@
+     }
+ 
+     private static String callResponses(JSONArray content, String apiKey, String model) throws Exception {
++        return callResponses(content, apiKey, model, false);
++    }
++
++    private static String callResponses(JSONArray content, String apiKey, String model, boolean structuredBatch) throws Exception {
+         HttpURLConnection c = (HttpURLConnection) new URL("https://api.openai.com/v1/responses").openConnection();
+         c.setRequestMethod("POST"); c.setDoOutput(true); c.setConnectTimeout(30000); c.setReadTimeout(120000);
+         c.setRequestProperty("Authorization", "Bearer " + apiKey); c.setRequestProperty("Content-Type", "application/json");
+         JSONObject req = new JSONObject(); req.put("model", model == null || model.trim().isEmpty() ? "gpt-5.4-mini" : model.trim());
+         JSONArray input = new JSONArray(); JSONObject msg = new JSONObject(); msg.put("role","user"); msg.put("content",content); input.put(msg); req.put("input",input); req.put("store",false);
++        // Extraction must be as stable as the API allows. OpenAI documents lower temperature as more deterministic.
++        req.put("temperature", 0.0);
++        if (structuredBatch) {
++            JSONObject format = new JSONObject();
++            format.put("type", "json_schema"); format.put("name", "BabaEllatasDocumentExtraction"); format.put("strict", true); format.put("schema", batchJsonSchema());
++            req.put("text", new JSONObject().put("format", format).put("verbosity", "low"));
++        }
+         byte[] payload=req.toString().getBytes(StandardCharsets.UTF_8); c.setFixedLengthStreamingMode(payload.length);
+         try(OutputStream out=c.getOutputStream()){out.write(payload);} String body=readResponse(c);
+         if(c.getResponseCode()/100!=2) throw new IOException("OpenAI elemzési hiba: "+compactError(body));
+@@ -254,6 +331,37 @@
+         if(sb.length()==0) throw new IOException("Az AI nem adott vissza feldolgozható választ."); return sb.toString().trim();
+     }
+ 
++    private static JSONObject batchJsonSchema() throws Exception {
++        JSONObject income = objectSchema(new String[]{"start","end","contributionIncome","incomeDays","official","source"},
++                props(
++                        "start", str(), "end", str(), "contributionIncome", integer(), "incomeDays", integer(), "official", bool(), "source", str()));
++        JSONObject job = objectSchema(new String[]{"relationshipId","employerTaxId","documentType","relationType","employer","start","end","startSource","endSource","ongoing","ongoingEvidence","evidenceStart","evidenceEnd","monthlyGross","monthlyGrossSource","sickPayDays","unpaidDays","insuredStatus","insuranceEvidence","incomeRecords","notes"},
++                props(
++                        "relationshipId", str(), "employerTaxId", str(), "documentType", str(), "relationType", str(), "employer", str(),
++                        "start", str(), "end", str(), "startSource", str(), "endSource", str(), "ongoing", bool(), "ongoingEvidence", bool(),
++                        "evidenceStart", str(), "evidenceEnd", str(), "monthlyGross", integer(), "monthlyGrossSource", enumStr("CONTRACT","PAYSLIP","NONE"),
++                        "sickPayDays", integer(), "unpaidDays", integer(), "insuredStatus", enumStr("igen","nem","bizonytalan"), "insuranceEvidence", bool(),
++                        "incomeRecords", new JSONObject().put("type","array").put("items",income), "notes", str()));
++        JSONObject coverage = objectSchema(new String[]{"neakInsuranceList","navContributionYears","payslipMonths","sickPayDocuments","contractDocuments","coverageNotes"},
++                props("neakInsuranceList",bool(), "navContributionYears",new JSONObject().put("type","array").put("items",integer()), "payslipMonths",integer(), "sickPayDocuments",bool(), "contractDocuments",bool(), "coverageNotes",str()));
++        return objectSchema(new String[]{"jobs","coverage","notes"}, props("jobs",new JSONObject().put("type","array").put("items",job), "coverage",coverage, "notes",str()));
++    }
++
++    private static JSONObject str() throws Exception { return new JSONObject().put("type","string"); }
++    private static JSONObject integer() throws Exception { return new JSONObject().put("type","integer"); }
++    private static JSONObject bool() throws Exception { return new JSONObject().put("type","boolean"); }
++    private static JSONObject enumStr(String... values) throws Exception { JSONArray a=new JSONArray(); for(String v:values)a.put(v); return new JSONObject().put("type","string").put("enum",a); }
++    private static JSONObject props(Object... kv) throws Exception { JSONObject p=new JSONObject(); for(int i=0;i<kv.length;i+=2)p.put((String)kv[i],kv[i+1]); return p; }
++    private static JSONObject objectSchema(String[] required, JSONObject properties) throws Exception { JSONArray r=new JSONArray(); for(String x:required)r.put(x); return new JSONObject().put("type","object").put("properties",properties).put("required",r).put("additionalProperties",false); }
++
++    private static String sha256Uri(Context context, Uri uri) throws Exception {
++        MessageDigest md = MessageDigest.getInstance("SHA-256");
++        try(InputStream in=context.getContentResolver().openInputStream(uri)) { if(in==null)throw new IOException("A dokumentum nem olvasható"); byte[] buf=new byte[8192]; int n; while((n=in.read(buf))!=-1)md.update(buf,0,n); }
++        return hex(md.digest());
++    }
++    private static String sha256Text(String s) throws Exception { MessageDigest md=MessageDigest.getInstance("SHA-256"); return hex(md.digest((s==null?"":s).getBytes(StandardCharsets.UTF_8))); }
++    private static String hex(byte[] b){StringBuilder s=new StringBuilder();for(byte x:b)s.append(String.format(java.util.Locale.ROOT,"%02x",x));return s.toString();}
++
+     private static EmploymentExtraction parseEmploymentExtraction(String raw) throws Exception {
+         String t=raw==null?"":raw.trim(); if(t.startsWith("```")){int f=t.indexOf('\n');if(f>=0)t=t.substring(f+1);int e=t.lastIndexOf("```");if(e>=0)t=t.substring(0,e);t=t.trim();}
+         int a=t.indexOf('{'),b=t.lastIndexOf('}');if(a>=0&&b>a)t=t.substring(a,b+1); JSONObject j=new JSONObject(t); EmploymentExtraction e=new EmploymentExtraction();
