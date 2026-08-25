@@ -1,0 +1,33 @@
+s/app/OpenAIClient.java	2026-08-25 06:47:10.006375114 +0000
+@@ -157,7 +157,7 @@
+                 "Ismerd fel az ÖSSZES, ebben az egy dokumentumban szereplő jogviszonyt és havi jövedelmi sort. " +
+                 "NEAK: biztosítási jogviszony neve/típusa és explicit kezdő-végdátuma elsődleges. " +
+                 "NAV: a saját munkáltatóhoz tartozó explicit biztosítási időszak és TB-járulékalapot képező jövedelem használható; a BEVALLÁSI HÓNAP önmagában nem jogviszony-kezdő/vég. " +
+-                "Szerződés/bérlap: monthlyGross csak kifejezett HAVI BRUTTÓ szerződéses bér/díj lehet. NAV-járulékalapot, nettó összeget, adót, TB-járulékot vagy összes közterhet SOHA ne tegyél monthlyGross mezőbe. " +
++                "Szerződés/bérlap: minden munkaszerződést kötelező külön jobs elemként visszaadni, ha a munkáltató és a munkaviszony kezdete azonosítható. Keresd különösen a 'munkaviszony kezdete', 'határozatlan idő', 'alapbér', 'havi bruttó munkabér' kifejezéseket; a szerződés kelte nem helyettesíti a munkaviszony kezdetét. Határozatlan idejű szerződésnél ongoing=true és ongoingEvidence=true. monthlyGross csak kifejezett HAVI BRUTTÓ szerződéses bér/díj lehet. NAV-járulékalapot, nettó összeget, adót, TB-járulékot vagy összes közterhet SOHA ne tegyél monthlyGross mezőbe. " +
+                 "Egyszeri megbízási díjat ne alakíts havi bérré. Ha nincs explicit havi bruttó, monthlyGross=0 és monthlyGrossSource=NONE. " +
+                 "A NAV havi sorokat ugyanahhoz a céghez/jogviszonyhoz incomeRecords-ként add. contributionIncome mindig az adott pontos időszak teljes járulékalapja. " +
+                 "Ha ugyanabban a dokumentumban több külön jogviszonytípus van ugyanannál a cégnél, külön jobs elem legyen. " +
+diff -ruN v111base/engine-test/TestImportV112.java v112src/engine-test/TestImportV112.java
+--- v111base/engine-test/TestImportV112.java	1970-01-01 00:00:00.000000000 +0000
++++ v112src/engine-test/TestImportV112.java	2026-08-25 06:47:10.197249860 +0000
+@@ -0,0 +1,19 @@
++import hu.babatamogatas.app.*;
++import java.time.*;
++import java.util.*;
++
++public class TestImportV112 {
++  public static void main(String[] args){
++    List<EmploymentPeriod> x=new ArrayList<>();
++    x.add(new EmploymentPeriod("g1","GYÖMRŐ VÁROS ÖNKORMÁNYZATA","Munkaviszony",LocalDate.of(2024,1,1),LocalDate.of(2026,4,30),685000,true,0,0,List.of("contract"),List.of()));
++    x.add(new EmploymentPeriod("g2","Gyömrő Város Önkormányzat","Munkaviszony",LocalDate.of(2026,2,1),LocalDate.of(2026,4,30),0,true,0,0,List.of("NAV"),List.of(new EmploymentPeriod.IncomeRecord(LocalDate.of(2026,2,1),LocalDate.of(2026,2,28),600000,28,true,"NAV"))));
++    List<EmploymentPeriod> n=EmploymentImportNormalizer.normalize(x);
++    if(n.size()!=1) throw new RuntimeException("Gyomro variants not merged: "+n.size());
++    if(n.get(0).monthlyGross!=685000) throw new RuntimeException("contract salary lost");
++    LocalDate csed=LocalDate.of(2027,1,1), ws=csed.minusYears(2);
++    List<EmploymentPeriod> f=EligibilityImportProcessor.filterToCsedImportWindow(n,ws,csed);
++    if(f.size()!=1) throw new RuntimeException("filtered relationship missing");
++    if(!f.get(0).start.equals(ws)) throw new RuntimeException("old start not clipped: "+f.get(0).start);
++    System.out.println("OK v1.12 import/window/merge");
++  }
++}
