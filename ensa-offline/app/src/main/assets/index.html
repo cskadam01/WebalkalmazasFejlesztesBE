@@ -28,6 +28,73 @@
 .completedAt{font-size:11px;color:var(--ok);margin-top:4px}
 .nextHint{border-left:4px solid var(--brand2);background:#edf8f9;padding:10px 12px;border-radius:10px;margin:10px 0}
 @media(min-width:760px){.permissionGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* ===== ENSA Offline v4.5 mobile redesign ===== */
+html,body{width:100%;height:100%;min-height:100%;overflow:hidden;background:#f3f6fa}
+body{overscroll-behavior:none}
+#login{height:100dvh;min-height:100dvh;overflow:auto}
+#app{height:100dvh;min-height:100dvh;max-height:100dvh;display:flex;flex-direction:column;overflow:hidden;padding:0!important;background:#f3f6fa}
+.topbar{position:relative!important;top:auto!important;flex:0 0 auto;min-height:62px;padding:10px 14px;background:#fff;border-bottom:1px solid #e2e8f0;box-shadow:0 1px 8px #1e38520a;z-index:50}
+.topbar .title{font-size:19px;line-height:1.05}
+.topbar .muted{font-size:11px;margin-top:3px}
+.topbar .user{max-width:48%;font-size:11px;line-height:1.25;overflow:hidden;text-overflow:ellipsis}
+.topbar .user a{display:inline-block;margin-top:3px}
+.content{flex:1 1 auto;min-height:0;width:100%;max-width:760px;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;padding:14px 14px calc(92px + env(safe-area-inset-bottom));margin:0 auto}
+.bottom{position:fixed!important;left:0!important;right:0!important;bottom:0!important;transform:none!important;width:100%!important;height:calc(72px + env(safe-area-inset-bottom))!important;min-height:72px;background:#fff;border:0;border-top:1px solid #dce4ee;border-radius:0!important;box-shadow:0 -5px 20px #18324d12;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));padding:0 2px env(safe-area-inset-bottom);z-index:1000;will-change:transform}
+.nav{min-width:0;padding:7px 1px 5px;font-size:9px;line-height:1.1;overflow:hidden}
+.nav b{font-size:20px}.nav.active{background:#f2f7fb;border-radius:12px}
+.fab{position:fixed!important;right:14px!important;bottom:calc(86px + env(safe-area-inset-bottom))!important;z-index:1100;width:50px;height:50px;font-size:24px}
+.sectionTitle{font-size:25px;line-height:1.15;margin:5px 0 12px;overflow-wrap:anywhere}
+.card,.item,.metric{border-color:#d9e2ec;box-shadow:0 3px 14px #17324d08}
+.card{padding:16px;border-radius:18px;margin:12px 0}
+.item{padding:14px;border-radius:16px;margin:10px 0;overflow:hidden}
+.row{min-width:0}.row>div{min-width:0}
+.row h3,.row h4,.item h4{overflow-wrap:anywhere}
+.toolbar{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto;gap:8px;margin:10px -2px 14px;padding:2px 2px 7px;scrollbar-width:none}
+.toolbar::-webkit-scrollbar{display:none}.toolbar button{flex:0 0 auto;white-space:nowrap;margin:0!important;padding:9px 12px;font-size:13px;border-radius:11px}
+.actions{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:10px}
+.actions button{max-width:100%;white-space:normal}
+.smallBtn,.secondary,.primary,.copyBtn{max-width:100%}
+.contactTop{background:linear-gradient(145deg,#123b69,#0d6d7a);color:#fff;border:0}
+.contactTop h3,.contactTop b{color:#fff}.contactTop .muted{color:#dbeaf2}.contactTop .contactLink{color:#fff}.contactTop .copyBtn{background:#ffffff18;border-color:#ffffff55;color:#fff}
+.contactCompact{padding:10px 0;border-top:1px solid #ffffff24}.contactCompact:first-of-type{border-top:0}
+.muniHeader{margin:2px 0 10px}.muniHeader h2{font-size:28px;margin:8px 0 4px;line-height:1.1}
+.statusNote{background:#fff;border:1px solid #e0e7ef;border-radius:14px;padding:12px 14px;color:#5d6878;font-size:13px;line-height:1.45;margin:10px 0 14px}
+.timeline{position:relative;margin-top:8px}
+.timeline:before{content:"";position:absolute;left:19px;top:20px;bottom:20px;width:2px;background:#dce5ef}
+.stepCard{position:relative;margin:0 0 10px;padding:14px 14px 14px 48px;background:#fff;border:1px solid #dbe3ec;border-radius:16px;box-shadow:0 2px 10px #17324d08;overflow:hidden}
+.stepDot{position:absolute;left:8px;top:13px;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#edf2f7;border:2px solid #cbd6e2;color:#506070;font-size:11px;font-weight:900;z-index:2}
+.stepCard.done .stepDot{background:#1c7c54;border-color:#1c7c54;color:#fff}
+.stepCard.next{border-color:#e0a400;box-shadow:0 0 0 2px #fff4c7 inset}
+.stepCard.next .stepDot{background:#fff6d9;border-color:#e0a400;color:#8a5b00}
+.stepTitleRow{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.stepTitle{font-size:16px;font-weight:850;line-height:1.25;overflow-wrap:anywhere;min-width:0}
+.stepState{flex:0 0 auto;font-size:10px;font-weight:850;border-radius:99px;padding:5px 8px;background:#eef3f8;color:#526579}
+.stepState.done{background:#e8f7ef;color:#176944}.stepState.next{background:#fff4d8;color:#8a5b00}
+.stepMeta{display:grid;gap:4px;margin-top:8px;font-size:11px;color:#667386}
+.stepMeta strong{color:#34445a}
+.stepActions{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.stepActions button{font-size:12px;padding:8px 10px}
+.stepDocs{margin-top:10px;border-top:1px solid #edf1f5;padding-top:9px}
+.stepDocsTitle{font-size:11px;font-weight:800;color:#526579;margin-bottom:6px}
+.stepDocRow{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#f7f9fc;border:1px solid #e3e9f0;border-radius:11px;padding:9px;margin-top:6px}
+.stepDocRow>div{min-width:0}.stepDocName{font-size:12px;font-weight:750;overflow-wrap:anywhere}.stepDocMeta{font-size:10px;color:#748094;margin-top:2px;overflow-wrap:anywhere}
+.templateCard{display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;align-items:start;background:#fff;border:1px solid #dbe3ec;border-radius:16px;padding:14px;margin:10px 0;box-shadow:0 2px 10px #17324d08}
+.templateNo{width:34px;height:34px;border-radius:10px;background:#eef4fa;color:#123b69;display:grid;place-items:center;font-weight:900;font-size:12px}
+.templateTitle{font-size:16px;line-height:1.3;font-weight:800;overflow-wrap:anywhere}
+.templateActions{display:flex;flex-wrap:wrap;gap:7px;grid-column:2;margin-top:7px}
+.templateActions button{margin:0!important}
+.partnerHead{display:block}.partnerHead h4{font-size:18px;line-height:1.3;margin:0 0 7px}.partnerActions{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+.detailsBudget summary{font-size:15px;line-height:1.35;overflow-wrap:anywhere}
+.permissionRow{align-items:flex-start}.permissionRow span{min-width:0;overflow-wrap:anywhere}
+@media(max-width:420px){
+ .content{padding-left:12px;padding-right:12px}
+ .topbar{padding-left:12px;padding-right:12px}
+ .stepCard{padding-left:44px}
+ .sectionTitle{font-size:23px}
+ .nav b{font-size:18px}.nav{font-size:8.5px}
+ .linkline{align-items:flex-start}.contactLink{max-width:100%}
+}
 </style></head><body>
 <section id="login"><div class="loginCard"><div class="logo">ENSA CRM</div><div class="sub">Offline mobil demonstráció</div><div class="field"><label>Céges e-mail</label><input id="email" type="email" autocomplete="username" placeholder="nev@omegacode.hu"></div><div class="field"><label>Jelszó</label><input id="password" type="password" autocomplete="current-password" placeholder="••••••••••"></div><button class="primary" style="width:100%" onclick="login()">Belépés</button><div id="loginError" class="error"></div><div class="hint">Tesztfiókok: <b>jakab.david@omegacode.hu</b> és <b>kardos.alexandra@omegacode.hu</b>.<br>Ez a kiadás teljesen offline; a módosítások csak ezen a telefonon maradnak.</div></div></section>
 <section id="app" class="hidden"><header class="topbar"><div><div class="title">ENSA CRM</div><div class="muted">Offline Demo · helyi adat</div></div><div class="user"><span id="who"></span><br><a href="#" onclick="logout();return false">Kijelentkezés</a></div></header><main id="view" class="content"></main><button id="fab" class="fab hidden" onclick="fabAction()">＋</button><nav class="bottom"><button class="nav active" data-v="dash" onclick="go('dash')"><b>⌂</b>Főoldal</button><button class="nav" data-v="muni" onclick="go('muni')"><b>⌖</b>Település</button><button class="nav" data-v="tasks" onclick="go('tasks')"><b>✓</b>Feladat</button><button class="nav" data-v="contractors" onclick="go('contractors')"><b>⚒</b>Kivitelező</button><button class="nav" data-v="budget" onclick="go('budget')"><b>Ft</b>Költség</button><button class="nav" data-v="profiles" onclick="go('profiles')"><b>⚙</b>Jogok</button></nav></section>
@@ -400,5 +467,133 @@ async function openStoredDocument(docId,name){
  try{let blob=await readDocBlob(docId);if(!blob)return alert('A fájl nem található ezen az eszközön.');let u=URL.createObjectURL(blob);let a=document.createElement('a');a.href=u;a.download=name||'dokumentum';a.target='_blank';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(u);a.remove()},5000)}catch(e){alert('Nem sikerült megnyitni: '+e)}
 }
 
+
+/* ===== ENSA Offline v4.5 municipality timeline + clean mobile UI ===== */
+function normalizeState(st){
+ st=st||seed();
+ st.dataVersion=DATA_VERSION;
+ st.generatedAt="2026-09-23";
+ st.userProfiles=st.userProfiles||deepClone(DEFAULT_PROFILES);
+ for(const [k,v] of Object.entries(DEFAULT_PROFILES)){
+   if(!st.userProfiles[k]) st.userProfiles[k]=deepClone(v);
+   st.userProfiles[k].permissions=Object.assign({},v.permissions||{},st.userProfiles[k].permissions||{});
+ }
+ st.taskTemplates=st.taskTemplates||steps.map((title,i)=>({id:'tpl_'+(i+1),title,order:i+1,active:true}));
+ st.budgetItems=st.budgetItems||[];
+ st.audit=st.audit||[];
+ (st.municipalities||[]).forEach(m=>{
+   m.documents=m.documents||[];
+   m.nextHint=m.nextHint||'';
+   (m.tasks||[]).forEach((t,i)=>{
+     t.templateId=t.templateId||st.taskTemplates[i]?.id||null;
+     if(t.done){
+       t.completedAt=t.completedAt||'Korábban teljesítve – pontos idő nem áll rendelkezésre';
+       t.completedBy=t.completedBy||'Migrált adat';
+     }else{
+       t.completedAt=t.completedAt||null;
+       t.completedBy=t.completedBy||null;
+     }
+     t.documents=t.documents||[];
+   });
+   (m.packages||[]).forEach(x=>{x.offers=x.offers||[]});
+ });
+ return st;
+}
+function progressPct(m){
+ let a=orderedMunicipalTasks(m), total=a.length||1, done=a.filter(x=>x.t.done).length;
+ return Math.round(done/total*100);
+}
+function taskStateInfo(m,t){
+ if(t.done)return {cls:'done',label:'Kész'};
+ let ordered=orderedMunicipalTasks(m),first=ordered.find(x=>!x.t.done);
+ if(first&&first.t===t)return {cls:'next',label:'Következő'};
+ return {cls:'',label:'Várakozik'};
+}
+function personLabel(v){
+ if(!v)return '—';
+ return USERS[v]||state.userProfiles?.[v]?.name||v;
+}
+function primaryContactBlock(m){
+ let list=m.contacts||[];
+ if(!list.length)return '<div class="card contactTop"><h3>Városi kontakt</h3><div class="muted">Nincs rögzített kapcsolattartó.</div>'+(can('editContacts')?'<div class="actions"><button class="copyBtn" onclick="contactModal(\''+m.id+'\',-1)">＋ Kapcsolattartó</button></div>':'')+'</div>';
+ return '<div class="card contactTop"><div class="row"><h3>Városi kontakt</h3>'+(can('editContacts')?'<button class="copyBtn" onclick="contactModal(\''+m.id+'\',-1)">＋ Új</button>':'')+'</div>'+
+ list.map((c,i)=>'<div class="contactCompact"><div class="row"><div><b>'+esc(c.name)+'</b><div class="muted">'+esc(c.role||'')+'</div></div>'+((can('editContacts')||can('deleteRecords'))?'<div class="actions">'+(can('editContacts')?'<button class="copyBtn" onclick="contactModal(\''+m.id+'\','+i+')">Szerkesztés</button>':'')+(can('deleteRecords')?'<button class="copyBtn" onclick="deleteContact(\''+m.id+'\','+i+')">Törlés</button>':'')+'</div>':'')+'</div>'+commLink(c.email,'email')+commLink(c.phone,'phone')+'</div>').join('')+
+ '</div>';
+}
+function stepDocsCompact(m,t,ti){
+ let docs=t.documents||[];
+ let rows=docs.length?docs.map(d=>'<div class="stepDocRow"><div><div class="stepDocName">'+esc(d.name)+'</div><div class="stepDocMeta">'+esc(d.category||'Dokumentum')+(d.accepted?' · elfogadva':'')+(d.uploadedAt?' · '+esc(d.uploadedAt):'')+(d.uploadedBy?' · feltöltötte: '+esc(personLabel(d.uploadedBy)):'')+'</div></div><div class="actions"><button class="smallBtn" onclick="openStoredDocument(\''+d.id+'\',\''+esc((d.name||'dokumentum').replace(/'/g,''))+'\')">Megnyitás</button>'+(can('deleteRecords')?'<button class="smallBtn danger" onclick="deleteTaskDocument(\''+m.id+'\','+ti+',\''+d.id+'\')">Törlés</button>':'')+'</div></div>').join(''):'';
+ return '<div class="stepDocs"><div class="stepDocsTitle">Dokumentumok'+(docs.length?' · '+docs.length:'')+'</div>'+rows+(can('uploadDocuments')?'<div class="stepActions"><button class="secondary" onclick="documentModal(\''+m.id+'\','+ti+')">＋ Dokumentum feltöltése</button></div>':'')+'</div>';
+}
+function timelineStep(m,t,ti,displayNo){
+ let st=taskStateInfo(m,t);
+ let meta='<div class="stepMeta">';
+ if(t.owner)meta+='<div><strong>Felelős:</strong> '+esc(t.owner)+'</div>';
+ if(t.due)meta+='<div><strong>Határidő:</strong> '+esc(t.due)+'</div>';
+ if(t.done){
+   meta+='<div><strong>Teljesítette:</strong> '+esc(personLabel(t.completedBy))+'</div>';
+   meta+='<div><strong>Elkészült:</strong> '+esc(t.completedAt||'—')+'</div>';
+ }
+ if(t.note)meta+='<div>'+esc(t.note)+'</div>';
+ meta+='</div>';
+ let actions='<div class="stepActions">';
+ if(can('editMunicipalTasks'))actions+='<button class="smallBtn" onclick="taskModal(\''+m.id+'\','+ti+')">Szerkesztés</button>';
+ if(can('completeMunicipalTasks'))actions+='<button class="smallBtn" onclick="toggleTask(\''+m.id+'\','+ti+')">'+(t.done?'Újranyitás':'✓ Készre jelölés')+'</button>';
+ if(can('deleteRecords'))actions+='<button class="smallBtn danger" onclick="deleteTask(\''+m.id+'\','+ti+')">Törlés</button>';
+ actions+='</div>';
+ return '<div class="stepCard '+st.cls+'"><div class="stepDot">'+(t.done?'✓':displayNo)+'</div><div class="stepTitleRow"><div class="stepTitle">'+esc(t.title)+'</div><span class="stepState '+st.cls+'">'+st.label+'</span></div>'+meta+actions+stepDocsCompact(m,t,ti)+'</div>';
+}
+function municipalityTimeline(m){
+ let ordered=orderedMunicipalTasks(m);
+ return '<div class="timeline">'+ordered.map((x,k)=>timelineStep(m,x.t,x.i,k+1)).join('')+'</div>';
+}
+function renderDetail(tab){
+ let m=state.municipalities.find(x=>x.id===selectedMuni);if(!m)return go('muni');
+ let tabs='<div class="toolbar"><button class="secondary" onclick="renderDetail(\'overview\')">ENSA folyamat</button><button class="secondary" onclick="renderDetail(\'tasks\')">Feladatok</button><button class="secondary" onclick="renderDetail(\'grants\')">Pályázatok</button><button class="secondary" onclick="renderDetail(\'packages\')">Kivitelezés</button><button class="secondary" onclick="renderDetail(\'mail\')">Levelezés</button></div>';
+ let head='<button class="secondary" onclick="go(\'muni\')">← Vissza</button><div class="muniHeader"><h2>'+esc(m.name)+'</h2><div class="muted">'+progressPct(m)+'% kész · '+orderedMunicipalTasks(m).filter(x=>!x.t.done).length+' nyitott lépés</div></div>'+primaryContactBlock(m)+tabs;
+ let body='';
+ if(tab==='overview'){
+   body='<div class="statusNote">'+esc(m.statusNote||'Nincs külön státuszmegjegyzés.')+'</div><div class="sectionTitle">ENSA lépések</div>'+municipalityTimeline(m);
+ }
+ if(tab==='tasks'){
+   body='<div class="sectionTitle">Önkormányzati feladatok</div><p class="muted">Ugyanezek a lépések szerkeszthető feladatnézetben. A teljesítés mindig ehhez a településhez tartozik.</p>'+
+   (can('editMunicipalTasks')?'<div class="actions"><button class="secondary" onclick="taskModal(\''+m.id+'\',-1)">＋ Egyedi feladat</button></div>':'')+municipalityTimeline(m);
+ }
+ if(tab==='grants'){
+   body='<div class="row"><h3>Pályázatok</h3>'+(can('editGrants')?'<button class="secondary" onclick="grantModal(\''+m.id+'\')">＋ Új</button>':'')+'</div>'+
+   (m.grants.length?m.grants.map((g,i)=>'<div class="item"><div class="row"><b>'+esc(g.name)+'</b><span class="pill">'+(g.step+1)+'/'+grantSteps.length+'</span></div><div class="muted">'+esc(grantSteps[g.step]||'')+'</div><div class="progress"><i style="width:'+(((g.step+1)/grantSteps.length*100).toFixed(0))+'%"></i></div>'+(g.note?'<div class="hint">'+esc(g.note)+'</div>':'')+(can('editGrants')?'<div class="actions"><button class="smallBtn" onclick="advanceGrant(\''+m.id+'\','+i+')">Következő lépés</button></div>':'')+'</div>').join(''):'<div class="empty">Nincs pályázat.</div>');
+ }
+ if(tab==='packages'){
+   body='<div class="row"><h3>Tanulmány / kivitelezés</h3>'+(can('editPackages')?'<button class="secondary" onclick="packageModal(\''+m.id+'\')">＋ Munkacsomag</button>':'')+'</div>'+(m.packages.length?m.packages.map((x,i)=>packageCard(m,x,i)).join(''):'<div class="empty">Még nincs munkacsomag.</div>');
+ }
+ if(tab==='mail'){
+   body='<div class="card"><h3>E-mail események</h3><p class="muted">A levéltörzs nem kerül a CRM-be; csak státusz és időpont.</p>'+(can('recordMail')?'<div class="actions"><button class="secondary" onclick="mailEvent(\''+m.id+'\',\'Kiküldve\')">✓ Kiküldve</button><button class="secondary" onclick="mailEvent(\''+m.id+'\',\'Válasz érkezett\')">↩ Válasz érkezett</button></div>':'')+'</div>'+
+   (m.emails.length?m.emails.slice().reverse().map(e=>'<div class="item"><div class="row"><b>'+esc(e.type)+'</b><span class="pill ok">✓</span></div><div class="muted">'+esc(e.time)+'</div>'+(e.note?'<div class="hint">'+esc(e.note)+'</div>':'')+'</div>').join(''):'<div class="empty">Még nincs e-mail esemény.</div>');
+ }
+ document.getElementById('view').innerHTML=head+body;
+}
+function toggleTask(mid,i){
+ if(!can('completeMunicipalTasks'))return alert('Nincs jogosultságod.');
+ let m=state.municipalities.find(x=>x.id===mid),t=m.tasks[i];
+ t.done=!t.done;
+ t.completedAt=t.done?nowHu():null;
+ t.completedBy=t.done?currentEmail():null;
+ let next=orderedMunicipalTasks(m).find(x=>!x.t.done);
+ m.nextHint=next?next.t.title:'Minden rögzített ENSA lépés elkészült.';
+ let ord=orderedMunicipalTasks(m),firstOpen=ord.findIndex(x=>!x.t.done);
+ m.step=firstOpen<0?Math.max(0,ord.length-1):Math.max(0,firstOpen);
+ audit(t.done?'Feladat teljesítve':'Feladat újranyitva',m.name+' / '+t.title);
+ save();renderDetail(current==='detail'?'overview':'tasks');
+}
+function taskList(){
+ let arr=(state.taskTemplates||[]).slice().sort((a,b)=>a.order-b.order);
+ return '<div class="sectionTitle">Feladatsablon és sorrend</div><p class="muted">Ez a központi sorrend. A teljesítés állapota önkormányzatonként külön él.</p>'+
+ (arr.length?arr.map((t,i)=>'<div class="templateCard"><div class="templateNo">'+String(i+1).padStart(2,'0')+'</div><div class="templateTitle">'+esc(t.title)+'</div>'+(can('editTaskTemplates')?'<div class="templateActions"><button class="smallBtn" onclick="moveTemplate(\''+t.id+'\',-1)">↑ Fel</button><button class="smallBtn" onclick="moveTemplate(\''+t.id+'\',1)">↓ Le</button><button class="smallBtn" onclick="editTemplate(\''+t.id+'\')">Szerkesztés</button></div>':'')+'</div>').join(''):'<div class="empty">Nincs sablon.</div>')+
+ (can('editTaskTemplates')?'<div class="actions"><button class="secondary" onclick="newTemplate()">＋ Új sablonfeladat</button></div>':'');
+}
+function contractorList(){
+ return '<div class="sectionTitle">Kivitelezők és szakmai partnerek</div><p class="muted">A törzsadat szerkesztése jogosultsághoz kötött.</p>'+
+ (state.contractors.length?state.contractors.map((c,i)=>'<div class="item"><div class="partnerHead"><h4>'+esc(c.name)+'</h4>'+(c.contact?'<div><b>'+esc(c.contact)+'</b>'+(c.role?' · '+esc(c.role):'')+'</div>':'')+'<div>'+(c.areas||[]).map(a=>'<span class="tag">'+esc(a)+'</span>').join('')+'</div>'+commLink(c.email,'email')+commLink(c.phone,'phone')+(c.status?'<div class="pill">'+esc(c.status)+'</div>':'')+(c.note?'<div class="hint">'+esc(c.note)+'</div>':'')+'</div>'+(can('editContractors')||can('deleteRecords')?'<div class="partnerActions">'+(can('editContractors')?'<button class="smallBtn" onclick="contractorModal('+i+')">Szerkesztés</button>':'')+(can('deleteRecords')?'<button class="smallBtn danger" onclick="deleteContractor('+i+')">Törlés</button>':'')+'</div>':'')+'</div>').join(''):'<div class="empty">Még nincs partner.</div>');
+}
 window.addEventListener('load',()=>{if(sessionStorage.getItem('ensa_user'))openApp()});
 </script></body></html>
