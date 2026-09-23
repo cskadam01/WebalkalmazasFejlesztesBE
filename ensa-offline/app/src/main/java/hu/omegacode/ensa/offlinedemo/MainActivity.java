@@ -23,7 +23,6 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        hideSystemUI();
 
         webView = new WebView(this);
         webView.setWebViewClient(new WebViewClient() {
@@ -81,6 +80,7 @@ public class MainActivity extends Activity {
         settings.setDisplayZoomControls(false);
 
         setContentView(webView);
+        hideSystemUI();
         webView.loadUrl("file:///android_asset/index.html");
     }
 
@@ -101,7 +101,8 @@ public class MainActivity extends Activity {
     private void hideSystemUI() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             getWindow().setDecorFitsSystemWindows(false);
-            WindowInsetsController controller = getWindow().getInsetsController();
+            View decor = getWindow().getDecorView();
+            WindowInsetsController controller = decor != null ? decor.getWindowInsetsController() : null;
             if (controller != null) {
                 controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
                 controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
