@@ -59,6 +59,13 @@ jobs:
           grep -q "targetSdkVersion:'36'" ensa-offline/apk-badging.txt
           grep -q "launchable-activity: name='hu.omegacode.ensa.offlinedemo.MainActivity'" ensa-offline/apk-badging.txt
 
+      - name: Enable KVM
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - name: Emulator launch smoke test
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -67,6 +74,8 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
+          force-avd-creation: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none -no-snapshot-save
           script: |
             set -e
             APK="ensa-offline/app/build/outputs/apk/debug/app-debug.apk"
