@@ -238,7 +238,7 @@ function renderDetail(tab){
  if(tab==='tasks'){
    body='<div class="row"><h3>Önkormányzati feladatok</h3>'+(can('editMunicipalTasks')?'<button class="secondary" onclick="taskModal(\''+m.id+'\',-1)">＋ Új</button>':'')+'</div>'+
    '<p class="muted">A kész állapot kizárólag ennél az önkormányzatnál érvényes.</p>'+
-   (m.tasks.length?m.tasks.map((t,i)=>'<div class="item"><div class="row"><div><b>'+esc(t.title)+'</b><div class="muted">'+esc(t.due||'Nincs határidő')+' · '+esc(t.owner||'Nincs felelős')+'</div>'+(t.note?'<div class="muted">'+esc(t.note)+'</div>':'')+(t.done?'<div class="completedAt">✓ Elkészült: '+esc(t.completedAt||'időpont nélkül')+'</div>':'')+'</div><div class="actions">'+(can('editMunicipalTasks')?'<button class="smallBtn" onclick="taskModal(\''+m.id+'\','+i+')">Szerkesztés</button>':'')+(can('completeMunicipalTasks')?'<button class="smallBtn" onclick="toggleTask(\''+m.id+'\','+i+')">'+(t.done?'Újranyit':'✓ Kész')+'</button>':'')+'</div></div>'+taskDocsHtml(m,t,i)+'</div>').join(''):'<div class="empty">Nincs feladat.</div>');
+   (m.tasks.length?orderedMunicipalTasks(m).map(({t,i})=>'<div class="item"><div class="row"><div><b>'+esc(t.title)+'</b><div class="muted">'+esc(t.due||'Nincs határidő')+' · '+esc(t.owner||'Nincs felelős')+'</div>'+(t.note?'<div class="muted">'+esc(t.note)+'</div>':'')+(t.done?'<div class="completedAt">✓ Elkészült: '+esc(t.completedAt||'időpont nélkül')+'</div>':'')+'</div><div class="actions">'+(can('editMunicipalTasks')?'<button class="smallBtn" onclick="taskModal(\''+m.id+'\','+i+')">Szerkesztés</button>':'')+(can('completeMunicipalTasks')?'<button class="smallBtn" onclick="toggleTask(\''+m.id+'\','+i+')">'+(t.done?'Újranyit':'✓ Kész')+'</button>':'')+'</div></div>'+taskDocsHtml(m,t,i)+'</div>').join(''):'<div class="empty">Nincs feladat.</div>');
  }
  if(tab==='grants'){
    body='<div class="row"><h3>Pályázatok</h3>'+(can('editGrants')?'<button class="secondary" onclick="grantModal(\''+m.id+'\')">＋ Új</button>':'')+'</div>'+
@@ -268,7 +268,7 @@ function moveTemplate(tid,dir){
 function editTemplate(tid){
  if(!can('editTaskTemplates'))return;let t=state.taskTemplates.find(x=>x.id===tid);let v=prompt('Feladat megnevezése:',t.title);if(v&&v.trim()){let old=t.title;t.title=v.trim();state.municipalities.forEach(m=>(m.tasks||[]).forEach(x=>{if(x.templateId===tid)x.title=t.title}));audit('Feladatsablon szerkesztve',old+' -> '+t.title);save();render();}
 }
-function newTemplate(){if(!can('editTaskTemplates'))return;let v=prompt('Új sablonfeladat:');if(!v)return;state.taskTemplates.push({id:id(),title:v.trim(),order:state.taskTemplates.length+1,active:true});audit('Új feladatsablon',v);save();render()}
+function newTemplate(){if(!can('editTaskTemplates'))return;let v=prompt('Új sablonfeladat:');if(!v)return;let tpl={id:id(),title:v.trim(),order:state.taskTemplates.length+1,active:true};state.taskTemplates.push(tpl);state.municipalities.forEach(m=>m.tasks.push({title:tpl.title,owner:'',due:'',done:false,completedAt:null,note:'Sablonból hozzáadva',documents:[],templateId:tpl.id}));audit('Új feladatsablon',v);save();render()}
 function taskModal(mid,ti){
  if(!can('editMunicipalTasks'))return alert('Nincs jogosultságod.');
  const m=state.municipalities.find(x=>x.id===mid),t=ti>=0?m.tasks[ti]:null;
@@ -350,6 +350,15 @@ function budgetMunicipality(m){
 }
 function mailEvent(mid,type){if(!can('recordMail'))return alert('Nincs jogosultságod.');let m=state.municipalities.find(m=>m.id===mid);m.emails.push({type,time:nowHu(),note:'Kézzel rögzített offline esemény'});audit('E-mail esemény',m.name+' / '+type);save();renderDetail('mail')}
 function advanceGrant(mid,i){if(!can('editGrants'))return alert('Nincs jogosultságod.');let g=state.municipalities.find(m=>m.id===mid).grants[i];g.step=Math.min(grantSteps.length-1,g.step+1);audit('Pályázati lépés',g.name+' -> '+g.step);save();renderDetail('grants')}
+
+function totals(){
+ let ps=allPackages(),
+ planned=ps.reduce((sum,p)=>sum+Number(p.planned||0),0),
+ selected=ps.reduce((sum,p)=>sum+Number((p.offers||[]).find(o=>o.selected)?.amount||0),0),
+ docContracted=(state.budgetItems||[]).filter(b=>String(b.id).startsWith('doc_')).reduce((sum,b)=>sum+Number(b.contracted||0),0),
+ actual=state.costs.reduce((sum,c)=>sum+Number(c.amount||0),0);
+ return {planned,contracted:selected+docContracted,actual};
+}
 function profilesPage(){
  let ps=Object.entries(state.userProfiles||{});
  return '<div class="sectionTitle">Felhasználók és jogosultságok</div><p class="muted">Csak Jakab Dávid és Kardos Alexandra adminisztrátor. Az ügyintézői jogosultságokat az admin állíthatja.</p>'+
@@ -359,6 +368,9 @@ function profilesPage(){
 function setPermission(email,key,val){if(!isAdmin())return;state.userProfiles[email].permissions=state.userProfiles[email].permissions||{};state.userProfiles[email].permissions[key]=!!val;audit('Jogosultság módosítva',email+' / '+key+'='+val);save()}
 function fabAction(){if(current==='tasks'&&can('editTaskTemplates'))newTemplate();else if(current==='contractors'&&can('editContractors'))contractorModal(-1)}
 let pendingDocFile=null;
+
+function templateOrderMap(){let m={};(state.taskTemplates||[]).forEach(t=>m[t.id]=Number(t.order||9999));return m}
+function orderedMunicipalTasks(m){let om=templateOrderMap();return (m.tasks||[]).map((t,i)=>({t,i})).sort((a,b)=>(om[a.t.templateId]??9999)-(om[b.t.templateId]??9999)||a.i-b.i)}
 function documentModal(mid,ti){
  if(!can('uploadDocuments'))return alert('Nincs jogosultságod.');
  showModal('Dokumentum feltöltése','<input type="hidden" id="d_mid" value="'+mid+'"><input type="hidden" id="d_ti" value="'+ti+'"><div class="field"><label>Dokumentum</label><input id="d_file" type="file" onchange="captureDocFile(this)"></div><div class="field"><label>Típus</label><select id="d_category"><option>Tanulmány</option><option>Árajánlat</option><option>Szerződés</option><option>Határozat</option><option>Szándéknyilatkozat</option><option>Hiánypótlás</option><option>Egyéb</option></select></div><div class="field"><label>Elfogadott / jóváhagyott?</label><select id="d_accepted"><option value="false">Nem</option><option value="true">Igen</option></select></div><div class="field"><label>Kapcsolódó összeg (Ft, opcionális)</label><input id="d_amount" type="number" min="0"></div><div class="field"><label>Megjegyzés</label><textarea id="d_note"></textarea></div><button class="primary" onclick="saveTaskDocument()">Feltöltés és mentés</button>');
