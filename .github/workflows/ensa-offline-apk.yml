@@ -84,10 +84,7 @@ jobs:
             test -n "$(adb shell pidof hu.omegacode.ensa.offlinedemo | tr -d '\r')"
             adb shell dumpsys activity activities | grep -q "hu.omegacode.ensa.offlinedemo"
             adb logcat -d > ensa-offline/logcat.txt
-            if grep -E "FATAL EXCEPTION|Process: hu\.omegacode\.ensa\.offlinedemo.*has died|Unable to start activity" ensa-offline/logcat.txt; then
-              echo "Launch crash detected"
-              exit 1
-            fi
+            ! grep -E "FATAL EXCEPTION|Process: hu\.omegacode\.ensa\.offlinedemo.*has died|Unable to start activity" ensa-offline/logcat.txt
             adb exec-out screencap -p > ensa-offline/launch-screen.png
             adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
             adb pull /sdcard/window.xml ensa-offline/window.xml >/dev/null 2>&1 || true
