@@ -11,7 +11,7 @@ on:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,13 +57,45 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee ensa-offline/apk-badging.txt
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee ensa-offline/apk-signature.txt
           grep -q "targetSdkVersion:'36'" ensa-offline/apk-badging.txt
+          grep -q "launchable-activity: name='hu.omegacode.ensa.offlinedemo.MainActivity'" ensa-offline/apk-badging.txt
+
+      - name: Emulator launch smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            set -e
+            APK="ensa-offline/app/build/outputs/apk/debug/app-debug.apk"
+            adb install -r "$APK"
+            adb logcat -c
+            adb shell am start -W -n hu.omegacode.ensa.offlinedemo/.MainActivity | tee ensa-offline/launch-result.txt
+            sleep 8
+            PID="$(adb shell pidof hu.omegacode.ensa.offlinedemo | tr -d '\r')"
+            test -n "$PID"
+            adb shell dumpsys activity activities | grep -q "hu.omegacode.ensa.offlinedemo"
+            adb logcat -d > ensa-offline/logcat.txt
+            if grep -E "FATAL EXCEPTION|Process: hu\.omegacode\.ensa\.offlinedemo.*has died|Unable to start activity" ensa-offline/logcat.txt; then
+              echo "Launch crash detected"
+              exit 1
+            fi
+            adb exec-out screencap -p > ensa-offline/launch-screen.png
+            adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
+            adb pull /sdcard/window.xml ensa-offline/window.xml >/dev/null 2>&1 || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: ENSA-CRM-Offline-Demo-v4.3
+          name: ENSA-CRM-Offline-Demo-v4.3-tested
           path: |
             ensa-offline/app/build/outputs/apk/debug/app-debug.apk
             ensa-offline/apk-badging.txt
             ensa-offline/apk-signature.txt
+            ensa-offline/launch-result.txt
+            ensa-offline/logcat.txt
+            ensa-offline/launch-screen.png
+            ensa-offline/window.xml
           if-no-files-found: error
