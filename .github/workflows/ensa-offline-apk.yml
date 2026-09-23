@@ -93,14 +93,17 @@ jobs:
             adb install -r ensa-offline/app/build/outputs/apk/debug/app-debug.apk
             adb logcat -c
             adb shell am start -W -n hu.omegacode.ensa.offlinedemo/.MainActivity | tee ensa-offline/launch-result.txt
-            sleep 8
-            test -n "$(adb shell pidof hu.omegacode.ensa.offlinedemo | tr -d '\r')"
-            adb shell dumpsys activity activities | grep -q "hu.omegacode.ensa.offlinedemo"
+            sleep 10
             adb logcat -d > ensa-offline/logcat.txt
-            ! grep -E "FATAL EXCEPTION|Process: hu\.omegacode\.ensa\.offlinedemo.*has died|Unable to start activity" ensa-offline/logcat.txt
-            adb exec-out screencap -p > ensa-offline/launch-screen.png
+            adb shell ps -A > ensa-offline/processes.txt || true
+            adb shell dumpsys activity top > ensa-offline/activity-top.txt || true
+            adb shell dumpsys activity activities > ensa-offline/activities.txt || true
+            adb exec-out screencap -p > ensa-offline/launch-screen.png || true
             adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
             adb pull /sdcard/window.xml ensa-offline/window.xml >/dev/null 2>&1 || true
+            ! grep -E "FATAL EXCEPTION|Process: hu\.omegacode\.ensa\.offlinedemo.*has died|Unable to start activity" ensa-offline/logcat.txt
+            grep -q "hu.omegacode.ensa.offlinedemo" ensa-offline/processes.txt
+            grep -q "hu.omegacode.ensa.offlinedemo" ensa-offline/activities.txt
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -114,4 +117,8 @@ jobs:
             ensa-offline/logcat.txt
             ensa-offline/launch-screen.png
             ensa-offline/window.xml
+            ensa-offline/processes.txt
+            ensa-offline/activity-top.txt
+            ensa-offline/activities.txt
           if-no-files-found: error
+        if: always()
