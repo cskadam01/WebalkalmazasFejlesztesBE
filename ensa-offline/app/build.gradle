@@ -1,0 +1,20 @@
+plugins { id "com.android.application" }
+
+android {
+    namespace "hu.omegacode.ensa.offlinedemo"
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "hu.omegacode.ensa.offlinedemo"
+        minSdk 23
+        targetSdk 36
+        versionCode 43
+        versionName "0.4.3-github"
+    }
+
+    buildTypes {
+        debug {
+            debuggable true
+        }
+    }
+}
