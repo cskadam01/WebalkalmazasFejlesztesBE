@@ -217,13 +217,13 @@ function dashboard(){
 function setStep(mid,v){if(!can('editMunicipalTasks'))return alert('Nincs jogosultságod.');state.municipalities.find(m=>m.id===mid).step=Number(v);audit('Folyamatlépés módosítva',mid+' -> '+v);save();renderDetail('overview')}
 function renderContact(c,ci,m){
  const canEdit=can('editContacts');
- return '<div class="item"><div class="row"><div><b>'+esc(c.name)+'</b><div class="muted">'+esc(c.role||'')+'</div></div>'+(canEdit?'<button class="smallBtn" onclick="contactModal(\''+m.id+'\','+ci+')">Szerkesztés</button>':'')+'</div>'+
+ return '<div class="item"><div class="row"><div><b>'+esc(c.name)+'</b><div class="muted">'+esc(c.role||'')+'</div></div>'+((canEdit||can('deleteRecords'))?'<div class="actions">'+(canEdit?'<button class="smallBtn" onclick="contactModal(\''+m.id+'\','+ci+')">Szerkesztés</button>':'')+(can('deleteRecords')?'<button class="smallBtn danger" onclick="deleteContact(\''+m.id+'\','+ci+')">Törlés</button>':'')+'</div>':'')+'</div>'+
  commLink(c.email,'email')+commLink(c.phone,'phone')+(c.note?'<div class="hint">'+esc(c.note)+'</div>':'')+'</div>';
 }
 function taskDocsHtml(m,t,ti){
  const docs=t.documents||[];
  return '<div class="doc"><b>Dokumentumok</b>'+
- (docs.length?docs.map(d=>'<div class="item"><div class="row"><div><b>'+esc(d.name)+'</b><div class="muted">'+esc(d.category||'Dokumentum')+' · '+esc(d.uploadedAt||'')+(d.accepted?' · ELFOGADVA':'')+'</div>'+(d.amount!=null?'<div class="money">'+money(d.amount)+'</div>':'')+'</div><button class="smallBtn" onclick="openStoredDocument(\''+d.id+'\',\''+esc((d.name||'dokumentum').replace(/'/g,''))+'\')">Megnyitás</button></div></div>').join(''):'<div class="muted">Nincs feltöltött dokumentum.</div>')+
+ (docs.length?docs.map(d=>'<div class="item"><div class="row"><div><b>'+esc(d.name)+'</b><div class="muted">'+esc(d.category||'Dokumentum')+' · '+esc(d.uploadedAt||'')+(d.accepted?' · ELFOGADVA':'')+'</div>'+(d.amount!=null?'<div class="money">'+money(d.amount)+'</div>':'')+'</div><div class="actions"><button class="smallBtn" onclick="openStoredDocument(\''+d.id+'\',\''+esc((d.name||'dokumentum').replace(/'/g,''))+'\')">Megnyitás</button>'+(can('deleteRecords')?'<button class="smallBtn danger" onclick="deleteTaskDocument(\''+m.id+'\','+ti+',\''+d.id+'\')">Törlés</button>':'')+'</div></div></div>').join(''):'<div class="muted">Nincs feltöltött dokumentum.</div>')+
  (can('uploadDocuments')?'<div class="actions"><button class="secondary" onclick="documentModal(\''+m.id+'\','+ti+')">＋ Dokumentum</button></div>':'')+'</div>';
 }
 function renderDetail(tab){
@@ -238,7 +238,7 @@ function renderDetail(tab){
  if(tab==='tasks'){
    body='<div class="row"><h3>Önkormányzati feladatok</h3>'+(can('editMunicipalTasks')?'<button class="secondary" onclick="taskModal(\''+m.id+'\',-1)">＋ Új</button>':'')+'</div>'+
    '<p class="muted">A kész állapot kizárólag ennél az önkormányzatnál érvényes.</p>'+
-   (m.tasks.length?orderedMunicipalTasks(m).map(({t,i})=>'<div class="item"><div class="row"><div><b>'+esc(t.title)+'</b><div class="muted">'+esc(t.due||'Nincs határidő')+' · '+esc(t.owner||'Nincs felelős')+'</div>'+(t.note?'<div class="muted">'+esc(t.note)+'</div>':'')+(t.done?'<div class="completedAt">✓ Elkészült: '+esc(t.completedAt||'időpont nélkül')+'</div>':'')+'</div><div class="actions">'+(can('editMunicipalTasks')?'<button class="smallBtn" onclick="taskModal(\''+m.id+'\','+i+')">Szerkesztés</button>':'')+(can('completeMunicipalTasks')?'<button class="smallBtn" onclick="toggleTask(\''+m.id+'\','+i+')">'+(t.done?'Újranyit':'✓ Kész')+'</button>':'')+'</div></div>'+taskDocsHtml(m,t,i)+'</div>').join(''):'<div class="empty">Nincs feladat.</div>');
+   (m.tasks.length?orderedMunicipalTasks(m).map(({t,i})=>'<div class="item"><div class="row"><div><b>'+esc(t.title)+'</b><div class="muted">'+esc(t.due||'Nincs határidő')+' · '+esc(t.owner||'Nincs felelős')+'</div>'+(t.note?'<div class="muted">'+esc(t.note)+'</div>':'')+(t.done?'<div class="completedAt">✓ Elkészült: '+esc(t.completedAt||'időpont nélkül')+'</div>':'')+'</div><div class="actions">'+(can('editMunicipalTasks')?'<button class="smallBtn" onclick="taskModal(\''+m.id+'\','+i+')">Szerkesztés</button>':'')+(can('completeMunicipalTasks')?'<button class="smallBtn" onclick="toggleTask(\''+m.id+'\','+i+')">'+(t.done?'Újranyit':'✓ Kész')+'</button>':'')+(can('deleteRecords')?'<button class="smallBtn danger" onclick="deleteTask(\''+m.id+'\','+i+')">Törlés</button>':'')+'</div></div>'+taskDocsHtml(m,t,i)+'</div>').join(''):'<div class="empty">Nincs feladat.</div>');
  }
  if(tab==='grants'){
    body='<div class="row"><h3>Pályázatok</h3>'+(can('editGrants')?'<button class="secondary" onclick="grantModal(\''+m.id+'\')">＋ Új</button>':'')+'</div>'+
@@ -369,6 +369,10 @@ function setPermission(email,key,val){if(!isAdmin())return;state.userProfiles[em
 function fabAction(){if(current==='tasks'&&can('editTaskTemplates'))newTemplate();else if(current==='contractors'&&can('editContractors'))contractorModal(-1)}
 let pendingDocFile=null;
 
+
+function deleteContact(mid,ci){if(!can('deleteRecords'))return;if(!confirm('Törlöd a kapcsolattartót?'))return;let m=state.municipalities.find(x=>x.id===mid);let n=m.contacts[ci]?.name||'';m.contacts.splice(ci,1);audit('Kapcsolattartó törölve',m.name+' / '+n);save();renderDetail('overview')}
+function deleteTask(mid,ti){if(!can('deleteRecords'))return;if(!confirm('Törlöd ezt az önkormányzati feladatot?'))return;let m=state.municipalities.find(x=>x.id===mid),n=m.tasks[ti]?.title||'';m.tasks.splice(ti,1);audit('Feladat törölve',m.name+' / '+n);save();renderDetail('tasks')}
+async function deleteTaskDocument(mid,ti,did){if(!can('deleteRecords'))return;if(!confirm('Törlöd ezt a dokumentumot?'))return;let m=state.municipalities.find(x=>x.id===mid),t=m.tasks[ti],d=(t.documents||[]).find(x=>x.id===did);t.documents=(t.documents||[]).filter(x=>x.id!==did);state.budgetItems=(state.budgetItems||[]).filter(x=>x.id!=='doc_'+did);try{let db=await docDb();let tx=db.transaction('files','readwrite');tx.objectStore('files').delete(did)}catch(e){}audit('Dokumentum törölve',m.name+' / '+(d?.name||did));save();renderDetail('tasks')}
 function templateOrderMap(){let m={};(state.taskTemplates||[]).forEach(t=>m[t.id]=Number(t.order||9999));return m}
 function orderedMunicipalTasks(m){let om=templateOrderMap();return (m.tasks||[]).map((t,i)=>({t,i})).sort((a,b)=>(om[a.t.templateId]??9999)-(om[b.t.templateId]??9999)||a.i-b.i)}
 function documentModal(mid,ti){
