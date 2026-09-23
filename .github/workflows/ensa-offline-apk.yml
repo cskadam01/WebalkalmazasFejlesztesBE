@@ -1,0 +1,59 @@
+name: ENSA Offline APK
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'ensa-offline/**'
+      - '.github/workflows/ensa-offline-apk.yml'
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install API 36
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Build debug APK
+        run: gradle -p ensa-offline :app:assembleDebug --stacktrace
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          APK="ensa-offline/app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee ensa-offline/apk-badging.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee ensa-offline/apk-signature.txt
+          grep -q "targetSdkVersion:'36'" ensa-offline/apk-badging.txt
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ENSA-CRM-Offline-Demo-v4.3
+          path: |
+            ensa-offline/app/build/outputs/apk/debug/app-debug.apk
+            ensa-offline/apk-badging.txt
+            ensa-offline/apk-signature.txt
+          if-no-files-found: error
