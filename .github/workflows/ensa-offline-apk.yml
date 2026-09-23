@@ -77,14 +77,11 @@ jobs:
           force-avd-creation: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none -no-snapshot-save
           script: |
-            set -e
-            APK="ensa-offline/app/build/outputs/apk/debug/app-debug.apk"
-            adb install -r "$APK"
+            adb install -r ensa-offline/app/build/outputs/apk/debug/app-debug.apk
             adb logcat -c
             adb shell am start -W -n hu.omegacode.ensa.offlinedemo/.MainActivity | tee ensa-offline/launch-result.txt
             sleep 8
-            PID="$(adb shell pidof hu.omegacode.ensa.offlinedemo | tr -d '\r')"
-            test -n "$PID"
+            test -n "$(adb shell pidof hu.omegacode.ensa.offlinedemo | tr -d '\r')"
             adb shell dumpsys activity activities | grep -q "hu.omegacode.ensa.offlinedemo"
             adb logcat -d > ensa-offline/logcat.txt
             if grep -E "FATAL EXCEPTION|Process: hu\.omegacode\.ensa\.offlinedemo.*has died|Unable to start activity" ensa-offline/logcat.txt; then
