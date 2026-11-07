@@ -23,8 +23,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Use hosted Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          command -v sdkmanager
       - name: Install Android API 36
         run: |
           yes | sdkmanager --licenses >/dev/null || true
