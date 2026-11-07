@@ -23,10 +23,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Use hosted Android SDK
+      - name: Locate hosted Android SDK Manager
         run: |
           echo "ANDROID_HOME=$ANDROID_HOME"
-          command -v sdkmanager
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -1)
+          test -x "$SDKMANAGER"
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
       - name: Install Android API 36
         run: |
           yes | sdkmanager --licenses >/dev/null || true
